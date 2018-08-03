@@ -6,11 +6,10 @@ import emcee
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 
 from scipy import optimize
 
-from pybnn import BaseModel
+from pybnn.base_model import BaseModel
 from pybnn.util.normalization import zero_mean_unit_var_normalization, zero_mean_unit_var_unnormalization
 from pybnn.bayesian_linear_regression import BayesianLinearRegression, Prior
 
@@ -24,16 +23,16 @@ class Net(nn.Module):
         self.out = nn.Linear(n_units[2], 1)
 
     def forward(self, x):
-        x = F.tanh(self.fc1(x))
-        x = F.tanh(self.fc2(x))
-        x = F.tanh(self.fc3(x))
+        x = torch.tanh(self.fc1(x))
+        x = torch.tanh(self.fc2(x))
+        x = torch.tanh(self.fc3(x))
 
         return self.out(x)
 
     def basis_funcs(self, x):
-        x = F.tanh(self.fc1(x))
-        x = F.tanh(self.fc2(x))
-        x = F.tanh(self.fc3(x))
+        x = torch.tanh(self.fc1(x))
+        x = torch.tanh(self.fc2(x))
+        x = torch.tanh(self.fc3(x))
         return x
 
 
@@ -194,7 +193,7 @@ class DNGO(BaseModel):
 
                 optimizer.zero_grad()
                 output = self.network(inputs)
-                loss = F.mse_loss(output, targets)
+                loss = torch.nn.functional.mse_loss(output, targets)
                 loss.backward()
                 optimizer.step()
 
