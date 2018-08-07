@@ -3,8 +3,8 @@ from setuptools import setup, find_packages
 setup(
     name='pybnn',
     version='0.0.1',
-    description='Simple Bayesian neural networks',
-    author='Aaron Klein',
+    description='Simple python framework for Bayesian neural networks',
+    author='Aaron Klein, Moritz Freidank',
     author_email='kleinaa@cs.uni-freiburg.de',
     url="https://github.com/automl/pybnn",
     license='BSD 3-Clause License',
