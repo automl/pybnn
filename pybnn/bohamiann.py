@@ -22,14 +22,12 @@ def get_default_network(input_dimensionality: int) -> torch.nn.Module:
             super(Net, self).__init__()
             self.fc1 = nn.Linear(input_dimensionality, 50)
             self.fc2 = nn.Linear(50, 50)
-            self.fc3 = nn.Linear(50, 50)
             self.mean = nn.Linear(50, 1)
             self.log_var = nn.Linear(50, 1)
 
         def forward(self, x):
             x = F.tanh(self.fc1(x))
             x = F.tanh(self.fc2(x))
-            x = F.tanh(self.fc3(x))
 
             m = self.mean(x)
             logvar = 20 * F.sigmoid(self.log_var(x))
