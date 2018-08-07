@@ -17,24 +17,31 @@ from pybnn.priors import weight_prior, log_variance_prior
 
 
 def get_default_network(input_dimensionality: int) -> torch.nn.Module:
-    class Net(nn.Module):
-        def __init__(self, input_dimensionality):
-            super(Net, self).__init__()
-            self.fc1 = nn.Linear(input_dimensionality, 50)
-            self.fc2 = nn.Linear(50, 50)
-            self.mean = nn.Linear(50, 1)
-            self.log_var = nn.Linear(50, 1)
+    class AppendLayer(nn.Module):
+        def __init__(self, bias=True, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            if bias:
+                self.bias = nn.Parameter(torch.Tensor(1, 1))
+            else:
+                self.register_parameter('bias', None)
 
         def forward(self, x):
-            x = F.tanh(self.fc1(x))
-            x = F.tanh(self.fc2(x))
+            return torch.cat((x, self.bias * torch.ones_like(x)), dim=1)
 
-            m = self.mean(x)
-            logvar = 20 * F.sigmoid(self.log_var(x))
+    def init_weights(module):
+        if type(module) == AppendLayer:
+            nn.init.constant_(module.bias, val=np.log(1e-3))
+        elif type(module) == nn.Linear:
+            nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="linear")
+            nn.init.constant_(module.bias, val=0.0)
 
-            return torch.cat([m, logvar], dim=1)
-
-    return Net(input_dimensionality)
+    return nn.Sequential(
+        nn.Linear(input_dimensionality, 50), nn.Tanh(),
+        nn.Linear(50, 50), nn.Tanh(),
+        nn.Linear(50, 50), nn.Tanh(),
+        nn.Linear(50, 1),
+        AppendLayer()
+    ).apply(init_weights)
 
 
 def nll(input, target):
@@ -275,7 +282,7 @@ class Bohamiann(BaseModel):
         mean_prediction = np.mean(network_outputs[:, :, 0], axis=0)
         # variance_prediction = np.mean((network_outputs[:, 0] - mean_prediction) ** 2, axis=0)
         # Total variance
-        variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + network_outputs[:, :, 1],
+        variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + np.exp(network_outputs[:, :, 1]),
                                       axis=0) - mean_prediction ** 2
 
         if self.normalize_output:
