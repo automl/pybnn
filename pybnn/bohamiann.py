@@ -7,7 +7,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.utils.data as data_utils
-import torch.nn.functional as F
 
 from pybnn.base_model import BaseModel
 from pybnn.util.normalization import zero_mean_unit_var_unnormalization, zero_mean_unit_var_normalization
@@ -247,7 +246,7 @@ class Bohamiann(BaseModel):
                 total_err = torch.mean((self.model(x_train_)[:, 0] - y_train_) ** 2).data.numpy()
                 t = time.time() - start_time
 
-                print("step {:8d} : NLL = {:11.4e} MSE = {:.4e} "
+                print("Step {:8d} : NLL = {:11.4e} MSE = {:.4e} "
                       "Samples= {} Time = {:5.2f}".format(step,
                                                           float(total_nll),
                                                           float(total_err),
