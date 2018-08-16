@@ -196,14 +196,16 @@ class Bohamiann(BaseModel):
                 " zero mean and unit variance."
             )
             x_train_, self.x_mean, self.x_std = zero_mean_unit_var_normalization(x_train)
-
-        x_train_ = torch.from_numpy(x_train_).float()
+            x_train_ = torch.from_numpy(x_train_).float()
+        else:
+            x_train_ = torch.from_numpy(x_train).float()
 
         if self.normalize_output:
             logging.debug("Normalizing training labels to zero mean and unit variance.")
             y_train_, self.y_mean, self.y_std = zero_mean_unit_var_normalization(y_train)
-
-        y_train_ = torch.from_numpy(y_train_).float()
+            y_train_ = torch.from_numpy(y_train_).float()
+        else:
+            y_train_ = torch.from_numpy(y_train).float()
 
         train_loader = infinite_dataloader(
             data_utils.DataLoader(
@@ -227,8 +229,8 @@ class Bohamiann(BaseModel):
             sampler.zero_grad()
 
             loss = nll(input=self.model(x_batch), target=y_batch)
-            #loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
-            #loss -= weight_prior(self.model.parameters()) / num_datapoints
+            # loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
+            loss -= weight_prior(self.model.parameters()) / num_datapoints
 
             loss.backward()
             sampler.step()
@@ -265,7 +267,7 @@ class Bohamiann(BaseModel):
         x_test_ = np.asarray(x_test)
 
         if self.normalize_input:
-            x_test_, *_ = zero_mean_unit_var_normalization(x_test, self.x_mean, self.x_std)
+            x_test_, *_ = zero_mean_unit_var_normalization(x_test_, self.x_mean, self.x_std)
 
         def network_predict(x_test_, weights):
             with torch.no_grad():
@@ -279,10 +281,10 @@ class Bohamiann(BaseModel):
         ])
 
         mean_prediction = np.mean(network_outputs[:, :, 0], axis=0)
-        # variance_prediction = np.mean((network_outputs[:, 0] - mean_prediction) ** 2, axis=0)
+        variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2, axis=0)
         # Total variance
-        variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + np.exp(network_outputs[:, :, 1]),
-                                      axis=0) - mean_prediction ** 2
+        # variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + np.exp(network_outputs[:, :, 1]),
+        #                               axis=0) - mean_prediction ** 2
 
         if self.normalize_output:
 
@@ -299,3 +301,48 @@ class Bohamiann(BaseModel):
         if return_individual_predictions:
             return mean_prediction, variance_prediction, network_outputs[:, :, 0]
         return mean_prediction, variance_prediction
+
+    def f_gradient(self, x_test, weights):
+        x_test_ = np.asarray(x_test)
+
+        with torch.no_grad():
+            self.network_weights = weights
+
+        x = torch.autograd.Variable(torch.from_numpy(x_test_[None, :]).float(), requires_grad=True)
+
+        if self.normalize_input:
+            x_mean = torch.autograd.Variable(torch.from_numpy(self.x_mean).float(), requires_grad=False)
+            x_std = torch.autograd.Variable(torch.from_numpy(self.x_std).float(), requires_grad=False)
+            x_norm = (x - x_mean) / x_std
+            m = self.model(x_norm)[0][0]
+        else:
+            m = self.model(x)[0][0]
+        if self.normalize_output:
+            y_mean = torch.autograd.Variable(torch.from_numpy(np.array([self.y_mean])).float(),
+                                             requires_grad=False)
+            y_std = torch.autograd.Variable(torch.from_numpy(np.array([self.y_std])).float(), requires_grad=False)
+            m = m * y_std + y_mean
+
+        m.backward()
+
+        g = x.grad.data.numpy()[0, :]
+        return g
+
+    def predictive_mean_gradient(self, x_test: np.ndarray):
+
+        grads = np.array([self.f_gradient(x_test, weights=weights) for weights in self.sampled_weights])
+
+        g = np.mean(grads, axis=0)
+
+        return g
+
+    def predictive_variance_gradient(self, x_test: np.ndarray):
+        m, v, funcs = self.predict(x_test[None, :], return_individual_predictions=True)
+
+        grads = np.array([self.f_gradient(x_test, weights=weights) for weights in self.sampled_weights])
+
+        dmdx = self.predictive_mean_gradient(x_test)
+
+        g = np.mean([2 * (funcs[i] - m) * (grads[i] - dmdx) for i in range(len(self.sampled_weights))], axis=0)
+
+        return g
