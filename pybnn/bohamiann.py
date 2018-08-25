@@ -11,7 +11,7 @@ import torch.utils.data as data_utils
 from pybnn.base_model import BaseModel
 from pybnn.util.normalization import zero_mean_unit_var_unnormalization, zero_mean_unit_var_normalization
 from pybnn.util.infinite_dataloader import infinite_dataloader
-from pybnn.sampler.adaptive_sghmc import AdaptiveSGHMC
+from pybnn.sampler import AdaptiveSGHMC
 from pybnn.priors import weight_prior, log_variance_prior
 
 
