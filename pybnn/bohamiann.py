@@ -195,14 +195,14 @@ class Bohamiann(BaseModel):
                 "Normalizing training datapoints to "
                 " zero mean and unit variance."
             )
-            x_train_, self.x_mean, self.x_std = zero_mean_unit_var_normalization(x_train)
+            x_train_, self.x_mean, self.x_std = self.normalize(x_train)
             x_train_ = torch.from_numpy(x_train_).float()
         else:
             x_train_ = torch.from_numpy(x_train).float()
 
         if self.normalize_output:
             logging.debug("Normalizing training labels to zero mean and unit variance.")
-            y_train_, self.y_mean, self.y_std = zero_mean_unit_var_normalization(y_train)
+            y_train_, self.y_mean, self.y_std = self.normalize(y_train)
             y_train_ = torch.from_numpy(y_train_).float()
         else:
             y_train_ = torch.from_numpy(y_train).float()
@@ -263,11 +263,14 @@ class Bohamiann(BaseModel):
 
         self.is_trained = True
 
+    def normalize(self, x, m=None, s=None):
+        return zero_mean_unit_var_normalization(x, m, s)
+
     def predict(self, x_test: np.ndarray, return_individual_predictions: bool = False):
         x_test_ = np.asarray(x_test)
 
         if self.normalize_input:
-            x_test_, *_ = zero_mean_unit_var_normalization(x_test_, self.x_mean, self.x_std)
+            x_test_, *_ = self.normalize(x_test_, self.x_mean, self.x_std)
 
         def network_predict(x_test_, weights):
             with torch.no_grad():
