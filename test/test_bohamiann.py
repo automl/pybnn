@@ -36,7 +36,7 @@ class TestBohamiann(unittest.TestCase):
         assert grad.shape[0] == X_test.shape[1]
 
         for xi in X_test:
-            err = check_grad(wrapper, wrapper_grad, xi, epsilon=1e-4)  # float precision
+            err = check_grad(wrapper, wrapper_grad, xi, epsilon=1e-8)
             assert err < 1e-2
 
     def test_gradient_variance(self):
@@ -52,7 +52,7 @@ class TestBohamiann(unittest.TestCase):
         assert grad.shape[0] == X_test.shape[1]
 
         for xi in X_test:
-            err = check_grad(wrapper, wrapper_grad, xi, epsilon=1e-4)  # float precision
+            err = check_grad(wrapper, wrapper_grad, xi, epsilon=1e-8)
             assert err < 1e-2
 
 

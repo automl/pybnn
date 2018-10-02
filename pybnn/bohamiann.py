@@ -20,7 +20,7 @@ def get_default_network(input_dimensionality: int) -> torch.nn.Module:
         def __init__(self, bias=True, *args, **kwargs):
             super().__init__(*args, **kwargs)
             if bias:
-                self.bias = nn.Parameter(torch.Tensor(1, 1))
+                self.bias = nn.Parameter(torch.DoubleTensor(1, 1))
             else:
                 self.register_parameter('bias', None)
 
@@ -196,16 +196,16 @@ class Bohamiann(BaseModel):
                 " zero mean and unit variance."
             )
             x_train_, self.x_mean, self.x_std = self.normalize(x_train)
-            x_train_ = torch.from_numpy(x_train_).float()
+            x_train_ = torch.from_numpy(x_train_).double()
         else:
-            x_train_ = torch.from_numpy(x_train).float()
+            x_train_ = torch.from_numpy(x_train).double()
 
         if self.normalize_output:
             logging.debug("Normalizing training labels to zero mean and unit variance.")
             y_train_, self.y_mean, self.y_std = self.normalize(y_train)
-            y_train_ = torch.from_numpy(y_train_).float()
+            y_train_ = torch.from_numpy(y_train_).double()
         else:
-            y_train_ = torch.from_numpy(y_train).float()
+            y_train_ = torch.from_numpy(y_train).double()
 
         train_loader = infinite_dataloader(
             data_utils.DataLoader(
@@ -214,14 +214,14 @@ class Bohamiann(BaseModel):
             )
         )
 
-        self.model = self.get_network(input_dimensionality=input_dimensionality)
+        self.model = self.get_network(input_dimensionality=input_dimensionality).double()
 
         sampler = AdaptiveSGHMC(self.model.parameters(),
                                 scale_grad=num_datapoints,
                                 num_burn_in_steps=num_burn_in_steps,
-                                lr=lr,
-                                mdecay=mdecay,
-                                noise=noise)
+                                lr=np.float64(lr),
+                                mdecay=np.float64(mdecay),
+                                noise=np.float64(noise))
 
         batch_generator = islice(enumerate(train_loader), num_steps)
 
@@ -230,7 +230,7 @@ class Bohamiann(BaseModel):
 
             loss = nll(input=self.model(x_batch), target=y_batch)
             # loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
-            loss -= weight_prior(self.model.parameters()) / num_datapoints
+            loss -= weight_prior(self.model.parameters()).double() / num_datapoints
 
             loss.backward()
             sampler.step()
@@ -275,7 +275,7 @@ class Bohamiann(BaseModel):
         def network_predict(x_test_, weights):
             with torch.no_grad():
                 self.network_weights = weights
-                return self.model(torch.from_numpy(x_test_).float()).numpy()
+                return self.model(torch.from_numpy(x_test_).double()).numpy()
 
         logging.debug("Predicting with %d networks." % len(self.sampled_weights))
         network_outputs = np.array([
@@ -311,19 +311,19 @@ class Bohamiann(BaseModel):
         with torch.no_grad():
             self.network_weights = weights
 
-        x = torch.autograd.Variable(torch.from_numpy(x_test_[None, :]).float(), requires_grad=True)
+        x = torch.autograd.Variable(torch.from_numpy(x_test_[None, :]).double(), requires_grad=True)
 
         if self.normalize_input:
-            x_mean = torch.autograd.Variable(torch.from_numpy(self.x_mean).float(), requires_grad=False)
-            x_std = torch.autograd.Variable(torch.from_numpy(self.x_std).float(), requires_grad=False)
+            x_mean = torch.autograd.Variable(torch.from_numpy(self.x_mean).double(), requires_grad=False)
+            x_std = torch.autograd.Variable(torch.from_numpy(self.x_std).double(), requires_grad=False)
             x_norm = (x - x_mean) / x_std
             m = self.model(x_norm)[0][0]
         else:
             m = self.model(x)[0][0]
         if self.normalize_output:
-            y_mean = torch.autograd.Variable(torch.from_numpy(np.array([self.y_mean])).float(),
+            y_mean = torch.autograd.Variable(torch.from_numpy(np.array([self.y_mean])).double(),
                                              requires_grad=False)
-            y_std = torch.autograd.Variable(torch.from_numpy(np.array([self.y_std])).float(), requires_grad=False)
+            y_std = torch.autograd.Variable(torch.from_numpy(np.array([self.y_std])).double(), requires_grad=False)
             m = m * y_std + y_mean
 
         m.backward()
