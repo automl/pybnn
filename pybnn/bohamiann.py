@@ -1,7 +1,7 @@
-from itertools import islice
 import logging
-import typing
 import time
+import typing
+from itertools import islice
 
 import numpy as np
 import torch
@@ -9,10 +9,10 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 
 from pybnn.base_model import BaseModel
-from pybnn.util.normalization import zero_mean_unit_var_unnormalization, zero_mean_unit_var_normalization
+from pybnn.priors import weight_prior
+from pybnn.sampler import AdaptiveSGHMC, SGLD
 from pybnn.util.infinite_dataloader import infinite_dataloader
-from pybnn.sampler import AdaptiveSGHMC
-from pybnn.priors import weight_prior, log_variance_prior
+from pybnn.util.normalization import zero_mean_unit_var_unnormalization, zero_mean_unit_var_normalization
 
 
 def get_default_network(input_dimensionality: int) -> torch.nn.Module:
@@ -66,6 +66,7 @@ class Bohamiann(BaseModel):
                  batch_size=20,
                  normalize_input: bool = True,
                  normalize_output: bool = True,
+                 sampling_method: str = "adaptive_sghmc",
                  metrics=(nn.MSELoss,)
                  ) -> None:
         """ Bayesian Neural Network for regression problems.
@@ -100,6 +101,7 @@ class Bohamiann(BaseModel):
         self.normalize_output = normalize_output
         self.get_network = get_network
         self.is_trained = False
+        self.sampling_method = sampling_method
         self.sampled_weights = []  # type: typing.List[typing.Tuple[np.ndarray]]
 
     @property
@@ -216,12 +218,20 @@ class Bohamiann(BaseModel):
 
         self.model = self.get_network(input_dimensionality=input_dimensionality).double()
 
-        sampler = AdaptiveSGHMC(self.model.parameters(),
-                                scale_grad=num_datapoints,
-                                num_burn_in_steps=num_burn_in_steps,
-                                lr=np.float64(lr),
-                                mdecay=np.float64(mdecay),
-                                noise=np.float64(noise))
+        if self.sampling_method == "adaptive_sghmc":
+            sampler = AdaptiveSGHMC(self.model.parameters(),
+                                    scale_grad=num_datapoints,
+                                    num_burn_in_steps=num_burn_in_steps,
+                                    lr=np.float64(lr),
+                                    mdecay=np.float64(mdecay),
+                                    noise=np.float64(noise))
+        elif self.sampling_method == "sgld":
+            sampler = SGLD(self.model.parameters(),
+                           scale_grad=num_datapoints,
+                           num_burn_in_steps=num_burn_in_steps,
+                           lr=np.float64(lr),
+                           mdecay=np.float64(mdecay),
+                           noise=np.float64(noise))
 
         batch_generator = islice(enumerate(train_loader), num_steps)
 
