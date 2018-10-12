@@ -1,10 +1,11 @@
 import torch
+import numpy as np
 from torch.optim import Optimizer
 
 
 # Pytorch Port of a previous tensorflow implementation in `tensorflow_probability`:
 # https://github.com/tensorflow/probability/blob/master/tensorflow_probability/g3doc/api_docs/python/tfp/optimizer/StochasticGradientLangevinDynamics.md
-class SGLD(Optimizer):
+class PreconditionedSGLD(Optimizer):
     """ Stochastic Gradient Langevin Dynamics Sampler with preconditioning.
         Optimization variable is viewed as a posterior sample under Stochastic
         Gradient Langevin Dynamics with noise rescaled in eaach dimension
@@ -12,11 +13,10 @@ class SGLD(Optimizer):
     """
     def __init__(self,
                  params,
-                 lr=1e-2,
-                 precondition_decay_rate=0.95,
-                 num_pseudo_batches=1,
-                 num_burn_in_steps=3000,
-                 diagonal_bias=1e-8) -> None:
+                 lr=np.float64(1e-2),
+                 num_train_points=1,
+                 precondition_decay_rate=np.float64(0.99),
+                 diagonal_bias=np.float64(1e-5)) -> None:
         """ Set up a SGLD Optimizer.
 
         Parameters
@@ -44,19 +44,16 @@ class SGLD(Optimizer):
         diagonal_bias : float, optional
             Term added to the diagonal of the preconditioner to prevent it from
             degenerating.
-            Default: `1e-8`.
+            Default: `1e-5`.
 
         """
         if lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
-        if num_burn_in_steps < 0:
-            raise ValueError("Invalid num_burn_in_steps: {}".format(num_burn_in_steps))
 
         defaults = dict(
             lr=lr, precondition_decay_rate=precondition_decay_rate,
-            num_pseudo_batches=num_pseudo_batches,
-            num_burn_in_steps=num_burn_in_steps,
-            diagonal_bias=1e-8,
+            diagonal_bias=diagonal_bias,
+            num_train_points=num_train_points
         )
         super().__init__(params, defaults)
 
@@ -74,45 +71,32 @@ class SGLD(Optimizer):
 
                 state = self.state[parameter]
                 lr = group["lr"]
-                num_pseudo_batches = group["num_pseudo_batches"]
-                precondition_decay_rate = group["precondition_decay_rate"]
+                num_train_points = group["num_train_points"]
+                precondition_decay_rate = group["precondition_decay_rate"]  # alpha
+                diagonal_bias = group["diagonal_bias"]  # lambda
                 gradient = parameter.grad.data
 
-                #  State initialization {{{ #
-
+                #  state initialization
                 if len(state) == 0:
                     state["iteration"] = 0
-                    state["momentum"] = torch.ones_like(parameter)
-
-                #  }}} State initialization #
+                    state["momentum"] = torch.ones_like(parameter).double()
 
                 state["iteration"] += 1
 
+                #  momentum update
                 momentum = state["momentum"]
+                momentum_t = momentum * precondition_decay_rate + (1.0 - precondition_decay_rate) * (gradient ** 2)
+                state["momentum"] = momentum_t  # V(theta_t+1)
 
-                #  Momentum update {{{ #
-                momentum.add_(
-                    (1.0 - precondition_decay_rate) * ((gradient ** 2) - momentum)
-                )
-                #  }}} Momentum update #
+                # compute preconditioner
+                preconditioner = (1. / (torch.sqrt(momentum_t) + diagonal_bias))  # G(theta_t+1)
 
-                if state["iteration"] > group["num_burn_in_steps"]:
-                    sigma = 1. / torch.sqrt(torch.tensor(lr))
-                else:
-                    sigma = torch.zeros_like(parameter)
+                # standard deviation of the injected noise
+                sigma = torch.sqrt(torch.tensor(lr).double()) * torch.sqrt(preconditioner)
 
-                preconditioner = (
-                    1. / torch.sqrt(momentum + group["diagonal_bias"])
-                )
+                mean = 0.5 * lr * (preconditioner * gradient * num_train_points)
+                delta = (mean + torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient)) * sigma)
 
-                scaled_grad = (
-                    0.5 * preconditioner * gradient * num_pseudo_batches +
-                    torch.normal(
-                        mean=torch.zeros_like(gradient),
-                        std=torch.ones_like(gradient)
-                    ) * sigma * torch.sqrt(preconditioner)
-                )
-
-                parameter.data.add_(-lr * scaled_grad)
+                parameter.data.add_(-delta)
 
         return loss
