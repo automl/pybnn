@@ -10,7 +10,7 @@ import torch.utils.data as data_utils
 
 from pybnn.base_model import BaseModel
 from pybnn.priors import weight_prior
-from pybnn.sampler import AdaptiveSGHMC, SGLD
+from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD
 from pybnn.util.infinite_dataloader import infinite_dataloader
 from pybnn.util.normalization import zero_mean_unit_var_unnormalization, zero_mean_unit_var_normalization
 
@@ -97,8 +97,8 @@ class Bohamiann(BaseModel):
         self.batch_size = batch_size
 
         self.metrics = metrics
-        self.normalize_input = normalize_input
-        self.normalize_output = normalize_output
+        self.do_normalize_input = normalize_input
+        self.do_normalize_output = normalize_output
         self.get_network = get_network
         self.is_trained = False
         self.sampling_method = sampling_method
@@ -192,19 +192,19 @@ class Bohamiann(BaseModel):
             " with % dimensions each." % (num_datapoints, input_dimensionality)
         )
 
-        if self.normalize_input:
+        if self.do_normalize_input:
             logging.debug(
                 "Normalizing training datapoints to "
                 " zero mean and unit variance."
             )
-            x_train_, self.x_mean, self.x_std = self.normalize(x_train)
+            x_train_, self.x_mean, self.x_std = self.normalize_input(x_train)
             x_train_ = torch.from_numpy(x_train_).double()
         else:
             x_train_ = torch.from_numpy(x_train).double()
 
-        if self.normalize_output:
+        if self.do_normalize_output:
             logging.debug("Normalizing training labels to zero mean and unit variance.")
-            y_train_, self.y_mean, self.y_std = self.normalize(y_train)
+            y_train_, self.y_mean, self.y_std = self.normalize_output(y_train)
             y_train_ = torch.from_numpy(y_train_).double()
         else:
             y_train_ = torch.from_numpy(y_train).double()
@@ -227,23 +227,33 @@ class Bohamiann(BaseModel):
                                     noise=np.float64(noise))
         elif self.sampling_method == "sgld":
             sampler = SGLD(self.model.parameters(),
-                           scale_grad=num_datapoints,
-                           num_burn_in_steps=num_burn_in_steps,
                            lr=np.float64(lr),
-                           mdecay=np.float64(mdecay),
-                           noise=np.float64(noise))
+                           scale_grad=num_datapoints)
+        elif self.sampling_method == "preconditioned_sgld":
+            sampler = PreconditionedSGLD(self.model.parameters(),
+                                         lr=np.float64(lr),
+                                         num_train_points=num_datapoints)
+        elif self.sampling_method == "sghmc":
+            sampler = SGHMC(self.model.parameters(),
+                            scale_grad=num_datapoints,
+                            mdecay=np.float64(mdecay),
+                            lr=np.float64(lr))
 
         batch_generator = islice(enumerate(train_loader), num_steps)
+
+        # from torch.optim.lr_scheduler import CosineAnnealingLR
+        # scheduler = CosineAnnealingLR(sampler, T_max=num_steps)
 
         for step, (x_batch, y_batch) in batch_generator:
             sampler.zero_grad()
 
             loss = nll(input=self.model(x_batch), target=y_batch)
             # loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
-            loss -= weight_prior(self.model.parameters()).double() / num_datapoints
+            # loss -= weight_prior(self.model.parameters()).double() / num_datapoints
 
             loss.backward()
             sampler.step()
+            # scheduler.step()
 
             if verbose and step < num_burn_in_steps and step % 512 == 0:
                 total_nll = torch.mean(nll(self.model(x_train_), y_train_)).data.numpy()
@@ -273,14 +283,17 @@ class Bohamiann(BaseModel):
 
         self.is_trained = True
 
-    def normalize(self, x, m=None, s=None):
+    def normalize_input(self, x, m=None, s=None):
+        return zero_mean_unit_var_normalization(x, m, s)
+
+    def normalize_output(self, x, m=None, s=None):
         return zero_mean_unit_var_normalization(x, m, s)
 
     def predict(self, x_test: np.ndarray, return_individual_predictions: bool = False):
         x_test_ = np.asarray(x_test)
 
-        if self.normalize_input:
-            x_test_, *_ = self.normalize(x_test_, self.x_mean, self.x_std)
+        if self.do_normalize_input:
+            x_test_, *_ = self.normalize_input(x_test_, self.x_mean, self.x_std)
 
         def network_predict(x_test_, weights):
             with torch.no_grad():
@@ -299,7 +312,7 @@ class Bohamiann(BaseModel):
         # variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + np.exp(network_outputs[:, :, 1]),
         #                               axis=0) - mean_prediction ** 2
 
-        if self.normalize_output:
+        if self.do_normalize_output:
 
             mean_prediction = zero_mean_unit_var_unnormalization(
                 mean_prediction, self.y_mean, self.y_std
@@ -323,7 +336,7 @@ class Bohamiann(BaseModel):
 
         x = torch.autograd.Variable(torch.from_numpy(x_test_[None, :]).double(), requires_grad=True)
 
-        if self.normalize_input:
+        if self.do_normalize_input:
             x_mean = torch.autograd.Variable(torch.from_numpy(self.x_mean).double(), requires_grad=False)
             x_std = torch.autograd.Variable(torch.from_numpy(self.x_std).double(), requires_grad=False)
             x_norm = (x - x_mean) / x_std
