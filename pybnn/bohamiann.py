@@ -222,7 +222,7 @@ class Bohamiann(BaseModel):
             sampler = AdaptiveSGHMC(self.model.parameters(),
                                     scale_grad=num_datapoints,
                                     num_burn_in_steps=num_burn_in_steps,
-                                    lr=np.float64(lr),
+                                    lr=np.float64(np.sqrt(lr)),
                                     mdecay=np.float64(mdecay),
                                     noise=np.float64(noise))
         elif self.sampling_method == "sgld":
