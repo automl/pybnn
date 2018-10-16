@@ -212,7 +212,8 @@ class Bohamiann(BaseModel):
         train_loader = infinite_dataloader(
             data_utils.DataLoader(
                 data_utils.TensorDataset(x_train_, y_train_),
-                batch_size=self.batch_size
+                batch_size=self.batch_size,
+                shuffle=True
             )
         )
 
