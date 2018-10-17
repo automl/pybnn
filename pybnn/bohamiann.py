@@ -7,12 +7,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.utils.data as data_utils
-
 from pybnn.base_model import BaseModel
-from pybnn.priors import weight_prior
-from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD
+from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD, ConstantSGD, SGHMCHD
 from pybnn.util.infinite_dataloader import infinite_dataloader
 from pybnn.util.normalization import zero_mean_unit_var_unnormalization, zero_mean_unit_var_normalization
+from scipy.stats import norm
 
 
 def get_default_network(input_dimensionality: int) -> torch.nn.Module:
@@ -156,6 +155,7 @@ class Bohamiann(BaseModel):
               lr: float = 1e-2,
               noise: float = 0.,
               mdecay: float = 0.05,
+              continue_training: bool = False,
               verbose=False):
 
         """ Train a BNN using input datapoints `x_train` with corresponding targets `y_train`.
@@ -182,9 +182,6 @@ class Bohamiann(BaseModel):
         """
         logging.debug("Training started.")
         start_time = time.time()
-
-        logging.debug("Clearing list of sampled weights.")
-        self.sampled_weights.clear()
 
         num_datapoints, input_dimensionality = x_train.shape
         logging.debug(
@@ -217,7 +214,11 @@ class Bohamiann(BaseModel):
             )
         )
 
-        self.model = self.get_network(input_dimensionality=input_dimensionality).double()
+        if not continue_training:
+            logging.debug("Clearing list of sampled weights.")
+
+            self.sampled_weights.clear()
+            self.model = self.get_network(input_dimensionality=input_dimensionality).double()
 
         if self.sampling_method == "adaptive_sghmc":
             sampler = AdaptiveSGHMC(self.model.parameters(),
@@ -239,6 +240,16 @@ class Bohamiann(BaseModel):
                             scale_grad=num_datapoints,
                             mdecay=np.float64(mdecay),
                             lr=np.float64(lr))
+        elif self.sampling_method == "constant_sgd":
+            sampler = ConstantSGD(self.model.parameters(),
+                                  batch_size=self.batch_size,
+                                  num_data_points=num_datapoints)
+
+        elif self.sampling_method == "sghmchd":
+            sampler = SGHMCHD(self.model.parameters(),
+                              num_burn_in_steps=num_burn_in_steps,
+                              lr=np.float64(lr), hyper_lr=1e-4,
+                              scale_grad=num_datapoints)
 
         batch_generator = islice(enumerate(train_loader), num_steps)
 
@@ -283,6 +294,43 @@ class Bohamiann(BaseModel):
                 self.sampled_weights.append(weights)
 
         self.is_trained = True
+
+    def train_and_evaluate(self, x_train: np.ndarray, y_train: np.ndarray,
+                           x_valid: np.ndarray, y_valid: np.ndarray,
+                           num_steps: int = 13000,
+                           validate_every_n_steps=1000,
+                           keep_every: int = 100,
+                           num_burn_in_steps: int = 3000,
+                           lr: float = 1e-2,
+                           noise: float = 0.,
+                           mdecay: float = 0.05,
+                           verbose=False):
+
+        # burn-in
+        self.train(x_train, y_train, num_burn_in_steps=num_burn_in_steps, num_steps=num_burn_in_steps,
+                   lr=lr, noise=noise, mdecay=mdecay, verbose=verbose)
+
+        learning_curve_mse = []
+        learning_curve_ll = []
+        n_steps = []
+        for i in range(num_steps // validate_every_n_steps):
+            self.train(x_train, y_train, num_burn_in_steps=0, num_steps=validate_every_n_steps,
+                       lr=lr, noise=noise, mdecay=mdecay, verbose=verbose, keep_every=keep_every,
+                       continue_training=True)
+            mu, var = self.predict(x_valid)
+
+            ll = np.mean(norm.logpdf(y_valid, loc=mu, scale=np.sqrt(var)))
+            mse = np.mean((y_valid - mu) ** 2)
+            step = num_burn_in_steps + (i + 1) * validate_every_n_steps
+
+            learning_curve_ll.append(ll)
+            learning_curve_mse.append(mse)
+            n_steps.append(step)
+
+            if verbose:
+                print("Validate : LL = {:11.4e} MSE = {:.4e}".format(ll, mse))
+
+        return n_steps, learning_curve_mse, learning_curve_ll
 
     def normalize_input(self, x, m=None, s=None):
         return zero_mean_unit_var_normalization(x, m, s)
