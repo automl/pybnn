@@ -113,7 +113,7 @@ class SGHMCHD(Optimizer):
                         params=(state["lr"],),
                         lr=0.002 / np.sqrt(group["scale_grad"])
                     )
-
+                state["iteration"] += 1
                 #  }}} State initialization #
 
                 #  Readability {{{ #
