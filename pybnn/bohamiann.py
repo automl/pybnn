@@ -248,7 +248,7 @@ class Bohamiann(BaseModel):
         elif self.sampling_method == "sghmchd":
             sampler = SGHMCHD(self.model.parameters(),
                               num_burn_in_steps=num_burn_in_steps,
-                              lr=np.float64(lr), hyper_lr=1e-4,
+                              lr=np.float64(lr), hyper_lr=1e-3,
                               scale_grad=num_datapoints)
 
         batch_generator = islice(enumerate(train_loader), num_steps)
@@ -330,7 +330,7 @@ class Bohamiann(BaseModel):
             if verbose:
                 print("Validate : LL = {:11.4e} MSE = {:.4e}".format(ll, mse))
 
-        return n_steps, learning_curve_mse, learning_curve_ll
+        return n_steps, learning_curve_ll, learning_curve_mse
 
     def normalize_input(self, x, m=None, s=None):
         return zero_mean_unit_var_normalization(x, m, s)
