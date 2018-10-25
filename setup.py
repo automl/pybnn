@@ -11,7 +11,7 @@ setup(
     classifiers=['Development Status :: 4 - Beta'],
     packages=find_packages(),
     python_requires='>=3',
-    install_requires=['torch', 'torchvision', 'numpy', 'emcee', 'scipy'],
+    install_requires=['torch', 'torchvision', 'numpy', 'emcee', 'scipy', 'sympy'],
     extras_require={},
     keywords=['python', 'Bayesian', 'neural networks'],
 )
