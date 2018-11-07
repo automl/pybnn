@@ -72,7 +72,7 @@ class SGLD(Optimizer):
                 if len(state) == 0:
                     state["iteration"] = 0
 
-                sigma = torch.sqrt(torch.tensor(lr).double())
+                sigma = torch.sqrt(torch.tensor(lr))
                 delta = (0.5 * lr * gradient * scale_grad +
                          sigma * torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient)))
 

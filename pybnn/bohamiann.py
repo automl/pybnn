@@ -66,6 +66,7 @@ class Bohamiann(BaseModel):
                  normalize_input: bool = True,
                  normalize_output: bool = True,
                  sampling_method: str = "adaptive_sghmc",
+                 use_double_precision: bool = True,
                  metrics=(nn.MSELoss,)
                  ) -> None:
         """ Bayesian Neural Network for regression problems.
@@ -100,6 +101,7 @@ class Bohamiann(BaseModel):
         self.do_normalize_output = normalize_output
         self.get_network = get_network
         self.is_trained = False
+        self.use_double_precision = use_double_precision
         self.sampling_method = sampling_method
         self.sampled_weights = []  # type: typing.List[typing.Tuple[np.ndarray]]
 
@@ -195,16 +197,29 @@ class Bohamiann(BaseModel):
                 " zero mean and unit variance."
             )
             x_train_, self.x_mean, self.x_std = self.normalize_input(x_train)
-            x_train_ = torch.from_numpy(x_train_).double()
+            if self.use_double_precision:
+                x_train_ = torch.from_numpy(x_train_).double()
+            else:
+                x_train_ = torch.from_numpy(x_train_).float()
         else:
-            x_train_ = torch.from_numpy(x_train).double()
+            if self.use_double_precision:
+                x_train_ = torch.from_numpy(x_train).double()
+            else:
+                x_train_ = torch.from_numpy(x_train).float()
 
         if self.do_normalize_output:
             logging.debug("Normalizing training labels to zero mean and unit variance.")
             y_train_, self.y_mean, self.y_std = self.normalize_output(y_train)
-            y_train_ = torch.from_numpy(y_train_).double()
+
+            if self.use_double_precision:
+                y_train_ = torch.from_numpy(y_train_).double()
+            else:
+                y_train_ = torch.from_numpy(y_train_).float()
         else:
-            y_train_ = torch.from_numpy(y_train).double()
+            if self.use_double_precision:
+                y_train_ = torch.from_numpy(y_train).double()
+            else:
+                y_train_ = torch.from_numpy(y_train).float()
 
         train_loader = infinite_dataloader(
             data_utils.DataLoader(
@@ -218,28 +233,36 @@ class Bohamiann(BaseModel):
             logging.debug("Clearing list of sampled weights.")
 
             self.sampled_weights.clear()
-            self.model = self.get_network(input_dimensionality=input_dimensionality).double()
+            if self.use_double_precision:
+                self.model = self.get_network(input_dimensionality=input_dimensionality).double()
+            else:
+                self.model = self.get_network(input_dimensionality=input_dimensionality).float()
+
+        if self.use_double_precision:
+            dtype = np.float64
+        else:
+            dtype = np.float
 
         if self.sampling_method == "adaptive_sghmc":
             sampler = AdaptiveSGHMC(self.model.parameters(),
                                     scale_grad=num_datapoints,
                                     num_burn_in_steps=num_burn_in_steps,
-                                    lr=np.float64(np.sqrt(lr)),
-                                    mdecay=np.float64(mdecay),
-                                    noise=np.float64(noise))
+                                    lr=dtype(np.sqrt(lr)),
+                                    mdecay=dtype(mdecay),
+                                    noise=dtype(noise))
         elif self.sampling_method == "sgld":
             sampler = SGLD(self.model.parameters(),
-                           lr=np.float64(lr),
+                           lr=dtype(lr),
                            scale_grad=num_datapoints)
         elif self.sampling_method == "preconditioned_sgld":
             sampler = PreconditionedSGLD(self.model.parameters(),
-                                         lr=np.float64(lr),
+                                         lr=dtype(lr),
                                          num_train_points=num_datapoints)
         elif self.sampling_method == "sghmc":
             sampler = SGHMC(self.model.parameters(),
                             scale_grad=num_datapoints,
-                            mdecay=np.float64(mdecay),
-                            lr=np.float64(lr))
+                            mdecay=dtype(mdecay),
+                            lr=dtype(lr))
         elif self.sampling_method == "constant_sgd":
             sampler = ConstantSGD(self.model.parameters(),
                                   batch_size=self.batch_size,
@@ -248,7 +271,7 @@ class Bohamiann(BaseModel):
         elif self.sampling_method == "sghmchd":
             sampler = SGHMCHD(self.model.parameters(),
                               num_burn_in_steps=num_burn_in_steps,
-                              lr=np.float64(lr), hyper_lr=1e-3,
+                              lr=dtype(lr), hyper_lr=1e-3,
                               scale_grad=num_datapoints)
 
         batch_generator = islice(enumerate(train_loader), num_steps)
@@ -258,7 +281,6 @@ class Bohamiann(BaseModel):
 
         for step, (x_batch, y_batch) in batch_generator:
             sampler.zero_grad()
-
             loss = nll(input=self.model(x_batch), target=y_batch)
             # loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
             # loss -= weight_prior(self.model.parameters()).double() / num_datapoints
@@ -268,6 +290,7 @@ class Bohamiann(BaseModel):
             # scheduler.step()
 
             if verbose and step < num_burn_in_steps and step % 512 == 0:
+
                 total_nll = torch.mean(nll(self.model(x_train_), y_train_)).data.numpy()
                 total_err = torch.mean((self.model(x_train_)[:, 0] - y_train_) ** 2).data.numpy()
                 t = time.time() - start_time
@@ -347,7 +370,10 @@ class Bohamiann(BaseModel):
         def network_predict(x_test_, weights):
             with torch.no_grad():
                 self.network_weights = weights
-                return self.model(torch.from_numpy(x_test_).double()).numpy()
+                if self.use_double_precision:
+                    return self.model(torch.from_numpy(x_test_).double()).numpy()
+                else:
+                    return self.model(torch.from_numpy(x_test_).float()).numpy()
 
         logging.debug("Predicting with %d networks." % len(self.sampled_weights))
         network_outputs = np.array([
@@ -383,19 +409,34 @@ class Bohamiann(BaseModel):
         with torch.no_grad():
             self.network_weights = weights
 
-        x = torch.autograd.Variable(torch.from_numpy(x_test_[None, :]).double(), requires_grad=True)
+        if self.use_double_precision:
+            x = torch.autograd.Variable(torch.from_numpy(x_test_[None, :]).double(), requires_grad=True)
+        else:
+             x = torch.autograd.Variable(torch.from_numpy(x_test_[None, :].float()), requires_grad=True)
 
         if self.do_normalize_input:
-            x_mean = torch.autograd.Variable(torch.from_numpy(self.x_mean).double(), requires_grad=False)
-            x_std = torch.autograd.Variable(torch.from_numpy(self.x_std).double(), requires_grad=False)
+            if self.use_double_precision:
+                x_mean = torch.autograd.Variable(torch.from_numpy(self.x_mean).double(), requires_grad=False)
+                x_std = torch.autograd.Variable(torch.from_numpy(self.x_std).double(), requires_grad=False)
+            else:
+                x_mean = torch.autograd.Variable(torch.from_numpy(self.x_mean).float(), requires_grad=False)
+                x_std = torch.autograd.Variable(torch.from_numpy(self.x_std).float(), requires_grad=False)
+
             x_norm = (x - x_mean) / x_std
             m = self.model(x_norm)[0][0]
         else:
             m = self.model(x)[0][0]
         if self.normalize_output:
-            y_mean = torch.autograd.Variable(torch.from_numpy(np.array([self.y_mean])).double(),
-                                             requires_grad=False)
-            y_std = torch.autograd.Variable(torch.from_numpy(np.array([self.y_std])).double(), requires_grad=False)
+
+            if self.use_double_precision:
+               y_mean = torch.autograd.Variable(torch.from_numpy(np.array([self.y_mean])).double(),
+                                         requires_grad=False)
+               y_std = torch.autograd.Variable(torch.from_numpy(np.array([self.y_std])).double(), requires_grad=False)
+
+            else:
+               y_mean = torch.autograd.Variable(torch.from_numpy(np.array([self.y_mean])).float(), requires_grad=False)
+               y_std = torch.autograd.Variable(torch.from_numpy(np.array([self.y_std])).float(), requires_grad=False)
+
             m = m * y_std + y_mean
 
         m.backward()

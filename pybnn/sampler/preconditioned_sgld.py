@@ -79,7 +79,7 @@ class PreconditionedSGLD(Optimizer):
                 #  state initialization
                 if len(state) == 0:
                     state["iteration"] = 0
-                    state["momentum"] = torch.ones_like(parameter).double()
+                    state["momentum"] = torch.ones_like(parameter)
 
                 state["iteration"] += 1
 
@@ -92,7 +92,7 @@ class PreconditionedSGLD(Optimizer):
                 preconditioner = (1. / (torch.sqrt(momentum_t) + diagonal_bias))  # G(theta_t+1)
 
                 # standard deviation of the injected noise
-                sigma = torch.sqrt(torch.tensor(lr).double()) * torch.sqrt(preconditioner)
+                sigma = torch.sqrt(torch.tensor(lr)) * torch.sqrt(preconditioner)
 
                 mean = 0.5 * lr * (preconditioner * gradient * num_train_points)
                 delta = (mean + torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient)) * sigma)
