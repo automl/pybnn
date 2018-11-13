@@ -67,7 +67,8 @@ class Bohamiann(BaseModel):
                  normalize_output: bool = True,
                  sampling_method: str = "adaptive_sghmc",
                  use_double_precision: bool = True,
-                 metrics=(nn.MSELoss,)
+                 metrics=(nn.MSELoss,),
+                 likelihood_function=nll,
                  ) -> None:
         """ Bayesian Neural Network for regression problems.
 
@@ -104,6 +105,7 @@ class Bohamiann(BaseModel):
         self.use_double_precision = use_double_precision
         self.sampling_method = sampling_method
         self.sampled_weights = []  # type: typing.List[typing.Tuple[np.ndarray]]
+        self.likelihood_function = likelihood_function
 
     @property
     def network_weights(self) -> np.ndarray:
@@ -146,7 +148,7 @@ class Bohamiann(BaseModel):
         True
 
         """
-        logging.debug("Assigning new network weights: %s" % str(weights))
+        logging.debug("Assigning new network weights")
         for parameter, sample in zip(self.model.parameters(), weights):
             parameter.copy_(torch.from_numpy(sample))
 
@@ -158,7 +160,8 @@ class Bohamiann(BaseModel):
               noise: float = 0.,
               mdecay: float = 0.05,
               continue_training: bool = False,
-              verbose=False):
+              verbose=False,
+              **kwargs):
 
         """ Train a BNN using input datapoints `x_train` with corresponding targets `y_train`.
         Parameters
@@ -190,6 +193,9 @@ class Bohamiann(BaseModel):
             "Processing %d training datapoints "
             " with % dimensions each." % (num_datapoints, input_dimensionality)
         )
+
+        self.X = x_train
+        self.y = y_train
 
         if self.do_normalize_input:
             logging.debug(
@@ -281,7 +287,7 @@ class Bohamiann(BaseModel):
 
         for step, (x_batch, y_batch) in batch_generator:
             sampler.zero_grad()
-            loss = nll(input=self.model(x_batch), target=y_batch)
+            loss = self.likelihood_function(input=self.model(x_batch), target=y_batch)
             # loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
             # loss -= weight_prior(self.model.parameters()).double() / num_datapoints
 
@@ -291,7 +297,7 @@ class Bohamiann(BaseModel):
 
             if verbose and step < num_burn_in_steps and step % 512 == 0:
 
-                total_nll = torch.mean(nll(self.model(x_train_), y_train_)).data.numpy()
+                total_nll = torch.mean(self.likelihood_function(self.model(x_train_), y_train_)).data.numpy()
                 total_err = torch.mean((self.model(x_train_)[:, 0] - y_train_) ** 2).data.numpy()
                 t = time.time() - start_time
                 print("Step {:8d} : NLL = {:11.4e} MSE = {:.4e} "
@@ -299,7 +305,7 @@ class Bohamiann(BaseModel):
                                               float(total_err), t))
 
             if verbose and step > num_burn_in_steps and step % 512 == 0:
-                total_nll = torch.mean(nll(self.model(x_train_), y_train_)).data.numpy()
+                total_nll = torch.mean(self.likelihood_function(self.model(x_train_), y_train_)).data.numpy()
                 total_err = torch.mean((self.model(x_train_)[:, 0] - y_train_) ** 2).data.numpy()
                 t = time.time() - start_time
 
@@ -312,7 +318,7 @@ class Bohamiann(BaseModel):
             if step > num_burn_in_steps and (step - num_burn_in_steps) % keep_every == 0:
                 logging.debug("Recording sample, step = %d " % step)
                 weights = self.network_weights
-                logging.debug("Sampled weights:\n%s" % str(weights))
+                logging.debug("Sampled weights:\n")
 
                 self.sampled_weights.append(weights)
 
@@ -402,6 +408,30 @@ class Bohamiann(BaseModel):
         if return_individual_predictions:
             return mean_prediction, variance_prediction, network_outputs[:, :, 0]
         return mean_prediction, variance_prediction
+
+    def predict_single(self, x_test: np.ndarray, sample_index: int):
+        x_test_ = np.asarray(x_test)
+
+        if self.do_normalize_input:
+            x_test_, *_ = self.normalize_input(x_test_, self.x_mean, self.x_std)
+
+        def network_predict(x_test_, weights):
+            with torch.no_grad():
+                self.network_weights = weights
+                if self.use_double_precision:
+                    return self.model(torch.from_numpy(x_test_).double()).numpy()
+                else:
+                    return self.model(torch.from_numpy(x_test_).float()).numpy()
+
+        logging.debug("Predicting with %d networks." % len(self.sampled_weights))
+        function_value = np.array(network_predict(x_test_, weights=self.sampled_weights[sample_index]))
+
+        if self.do_normalize_output:
+
+            function_value = zero_mean_unit_var_unnormalization(
+                function_value, self.y_mean, self.y_std
+            )
+        return function_value
 
     def f_gradient(self, x_test, weights):
         x_test_ = np.asarray(x_test)
