@@ -3,4 +3,3 @@ from .preconditioned_sgld import PreconditionedSGLD
 from .sgld import SGLD
 from .sghmc import SGHMC
 from .constant_sgd import ConstantSGD
-from .sghmc_hd import SGHMCHD
