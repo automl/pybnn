@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data as data_utils
 from pybnn.base_model import BaseModel
-from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD, ConstantSGD, SGHMCHD
+from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD, ConstantSGD
 from pybnn.util.infinite_dataloader import infinite_dataloader
 from pybnn.util.normalization import zero_mean_unit_var_unnormalization, zero_mean_unit_var_normalization
 from scipy.stats import norm
@@ -274,12 +274,6 @@ class Bohamiann(BaseModel):
                                   batch_size=self.batch_size,
                                   num_data_points=num_datapoints)
 
-        elif self.sampling_method == "sghmchd":
-            sampler = SGHMCHD(self.model.parameters(),
-                              num_burn_in_steps=num_burn_in_steps,
-                              lr=dtype(lr), hyper_lr=1e-3,
-                              scale_grad=num_datapoints)
-
         batch_generator = islice(enumerate(train_loader), num_steps)
 
         # from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -316,9 +310,7 @@ class Bohamiann(BaseModel):
                                                           len(self.sampled_weights), t))
 
             if step > num_burn_in_steps and (step - num_burn_in_steps) % keep_every == 0:
-                logging.debug("Recording sample, step = %d " % step)
                 weights = self.network_weights
-                logging.debug("Sampled weights:\n")
 
                 self.sampled_weights.append(weights)
 
