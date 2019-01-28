@@ -21,7 +21,7 @@ class TestNormalization(unittest.TestCase):
         X_norm = np.random.rand(100, 3)
         lo = np.ones([3]) * -1
         up = np.ones([3])
-        X = normalization.zero_one_unnormalization(X_norm, lo, up)
+        X = normalization.zero_one_denormalization(X_norm, lo, up)
 
         assert X_norm.shape == X.shape
         assert np.all(np.min(X, axis=0) >= lo)
@@ -42,7 +42,7 @@ class TestNormalization(unittest.TestCase):
         X_norm = np.random.randn(100, 3)
         m = np.ones(X_norm.shape[1]) * 3
         s = np.ones(X_norm.shape[1]) * 0.1
-        X = normalization.zero_mean_unit_var_unnormalization(X_norm, m, s)
+        X = normalization.zero_mean_unit_var_denormalization(X_norm, m, s)
 
         np.testing.assert_almost_equal(np.mean(X, axis=0), m, decimal=1)
         np.testing.assert_almost_equal(np.var(X, axis=0), s**2, decimal=1)

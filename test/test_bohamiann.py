@@ -1,6 +1,5 @@
 import unittest
 import numpy as np
-
 from scipy.optimize import check_grad
 from pybnn.bohamiann import Bohamiann
 
@@ -10,7 +9,7 @@ class TestBohamiann(unittest.TestCase):
     def setUp(self):
         self.X = np.random.rand(10, 3)
         self.y = np.sinc(self.X * 10 - 5).sum(axis=1)
-        self.model = Bohamiann(normalize_input=True, normalize_output=True)
+        self.model = Bohamiann(normalize_input=True, normalize_output=True, use_double_precision=True)
         self.model.train(self.X, self.y, num_burn_in_steps=20, num_steps=100, keep_every=10)
 
     def test_predict(self):
@@ -36,14 +35,15 @@ class TestBohamiann(unittest.TestCase):
         assert grad.shape[0] == X_test.shape[1]
 
         for xi in X_test:
-            err = check_grad(wrapper, wrapper_grad, xi, epsilon=1e-8)
-            assert err < 1e-2
+            err = check_grad(wrapper, wrapper_grad, xi, epsilon=1e-6)
+            assert err < 1e-5
 
     def test_gradient_variance(self):
         X_test = np.random.rand(10, self.X.shape[1])
 
         def wrapper(x):
-            return self.model.predict([x])[1]
+            v = self.model.predict([x])[1]
+            return v
 
         def wrapper_grad(x):
             return self.model.predictive_variance_gradient(x)
@@ -52,8 +52,8 @@ class TestBohamiann(unittest.TestCase):
         assert grad.shape[0] == X_test.shape[1]
 
         for xi in X_test:
-            err = check_grad(wrapper, wrapper_grad, xi, epsilon=1e-8)
-            assert err < 1e-2
+            err = check_grad(wrapper, wrapper_grad, xi, epsilon=1e-6)
+            assert err < 1e-5
 
 
 if __name__ == "__main__":
