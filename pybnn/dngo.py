@@ -10,7 +10,7 @@ import torch.optim as optim
 from scipy import optimize
 
 from pybnn.base_model import BaseModel
-from pybnn.util.normalization import zero_mean_unit_var_normalization, zero_mean_unit_var_unnormalization
+from pybnn.util.normalization import zero_mean_unit_var_normalization, zero_mean_unit_var_denormalization
 from pybnn.bayesian_linear_regression import BayesianLinearRegression, Prior
 
 
@@ -386,7 +386,7 @@ class DNGO(BaseModel):
             v[np.where((v < np.finfo(v.dtype).eps) & (v > -np.finfo(v.dtype).eps))] = 0
 
         if self.normalize_output:
-            m = zero_mean_unit_var_unnormalization(m, self.y_mean, self.y_std)
+            m = zero_mean_unit_var_denormalization(m, self.y_mean, self.y_std)
             v *= self.y_std ** 2
 
         return m, v
@@ -405,9 +405,9 @@ class DNGO(BaseModel):
 
         inc, inc_value = super(DNGO, self).get_incumbent()
         if self.normalize_input:
-            inc = zero_mean_unit_var_unnormalization(inc, self.X_mean, self.X_std)
+            inc = zero_mean_unit_var_denormalization(inc, self.X_mean, self.X_std)
 
         if self.normalize_output:
-            inc_value = zero_mean_unit_var_unnormalization(inc_value, self.y_mean, self.y_std)
+            inc_value = zero_mean_unit_var_denormalization(inc_value, self.y_mean, self.y_std)
 
         return inc, inc_value
