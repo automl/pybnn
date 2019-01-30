@@ -249,11 +249,11 @@ class Bohamiann(BaseModel):
         if self.use_double_precision:
             dtype = np.float64
         else:
-            dtype = np.float
+            dtype = np.float32
 
         if self.sampling_method == "adaptive_sghmc":
             sampler = AdaptiveSGHMC(self.model.parameters(),
-                                    scale_grad=num_datapoints,
+                                    scale_grad=dtype(num_datapoints),
                                     num_burn_in_steps=num_burn_in_steps,
                                     lr=dtype(np.sqrt(lr)),
                                     mdecay=dtype(mdecay),
@@ -268,7 +268,7 @@ class Bohamiann(BaseModel):
                                          num_train_points=num_datapoints)
         elif self.sampling_method == "sghmc":
             sampler = SGHMC(self.model.parameters(),
-                            scale_grad=num_datapoints,
+                            scale_grad=dtype(num_datapoints),
                             mdecay=dtype(mdecay),
                             lr=dtype(lr))
         elif self.sampling_method == "constant_sgd":

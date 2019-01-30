@@ -54,7 +54,7 @@ class SGHMC(Optimizer):
             raise ValueError("Invalid learning rate: {}".format(lr))
 
         defaults = dict(
-            lr=lr, scale_grad=float(scale_grad),
+            lr=lr, scale_grad=scale_grad,
             mdecay=mdecay,
             wd=wd
         )
