@@ -1,71 +1,41 @@
-import logging
-import time
-import typing
-from itertools import islice
 from copy import deepcopy
-
+from functools import partial
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.utils.data as data_utils
-
-from pybnn.base_model import BaseModel
-from pybnn.priors import weight_prior
-from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD
-from pybnn.util.infinite_dataloader import infinite_dataloader
-from pybnn.util.normalization import zero_mean_unit_var_unnormalization, zero_mean_unit_var_normalization
 from pybnn.bohamiann import Bohamiann
+from pybnn.util.layers import AppendLayer
 
 
-def get_default_network(input_dimensionality: int) -> torch.nn.Module:
-    class AppendLayer(nn.Module):
-        def __init__(self, bias=True, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            if bias:
-                self.bias = nn.Parameter(torch.DoubleTensor(1, 1))
-            else:
-                self.register_parameter('bias', None)
+def get_multitask_network(input_dimensionality: int, n_tasks: int) -> torch.nn.Module:
 
-        def forward(self, x):
-            return torch.cat((x, self.bias * torch.ones_like(x)), dim=1)
+    class Architecture(torch.nn.Module):
+        def __init__(self, n_inputs, n_tasks, emb_dim=5, n_hidden=50):
+            super(Architecture, self).__init__()
+            self.fc1 = torch.nn.Linear(n_inputs - 1 + emb_dim, n_hidden)
+            self.fc2 = torch.nn.Linear(n_hidden, n_hidden)
+            self.fc3 = torch.nn.Linear(n_hidden, 1)
+            self.log_std = AppendLayer(noise=1e-3)
+            self.emb = torch.nn.Embedding(n_tasks, emb_dim)
+            self.n_tasks = n_tasks
 
-    def init_weights(module):
-        if type(module) == AppendLayer:
-            nn.init.constant_(module.bias, val=np.log(1e-3))
-        elif type(module) == nn.Linear:
-            nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="linear")
-            nn.init.constant_(module.bias, val=0.0)
+        def forward(self, input):
+            x = input[:, :-1]
+            t = input[:, -1:]
+            t_emb = self.emb(t.long()[:, 0])
+            x = torch.cat((x, t_emb), dim=1)
+            x = torch.tanh(self.fc1(x))
+            x = torch.tanh(self.fc2(x))
+            x = self.fc3(x)
+            return self.log_std(x)
 
-    return nn.Sequential(
-        nn.Linear(input_dimensionality, 50), nn.Tanh(),
-        nn.Linear(50, 50), nn.Tanh(),
-        nn.Linear(50, 50), nn.Tanh(),
-        nn.Linear(50, 1),
-        AppendLayer()
-    ).apply(init_weights)
-
-
-def nll(input, target):
-    batch_size = input.size(0)
-
-    prediction_mean = input[:, 0].view((-1, 1))
-    log_prediction_variance = input[:, 1].view((-1, 1))
-    prediction_variance_inverse = 1. / (torch.exp(log_prediction_variance) + 1e-16)
-
-    mean_squared_error = (target.view(-1, 1) - prediction_mean) ** 2
-
-    log_likelihood = torch.sum(
-        torch.sum(-mean_squared_error * (0.5 * prediction_variance_inverse) - 0.5 * log_prediction_variance, dim=1))
-
-    log_likelihood = log_likelihood / batch_size
-
-    return -log_likelihood
+    return Architecture(n_inputs=input_dimensionality, n_tasks=n_tasks)
 
 
 class MultiTaskBohamiann(Bohamiann):
     def __init__(self,
                  n_tasks: int,
-                 get_network=get_default_network,
+                 get_network=get_multitask_network,
                  batch_size=20,
                  normalize_input: bool = True,
                  normalize_output: bool = True,
@@ -96,7 +66,9 @@ class MultiTaskBohamiann(Bohamiann):
             Specifies whether outputs should be un-normalized.
         """
         self.n_tasks = n_tasks
-        super(MultiTaskBohamiann, self).__init__(get_network, batch_size, normalize_output, normalize_input,
+
+        func = partial(get_network, n_tasks=n_tasks)
+        super(MultiTaskBohamiann, self).__init__(func, batch_size, normalize_output, normalize_input,
                                                  sampling_method, metrics, use_double_precision)
 
     def normalize_input(self, x, m=None, s=None):
