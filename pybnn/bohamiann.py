@@ -13,6 +13,7 @@ from pybnn.base_model import BaseModel
 from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD, ConstantSGD
 from pybnn.util.infinite_dataloader import infinite_dataloader
 from pybnn.util.normalization import zero_mean_unit_var_denormalization, zero_mean_unit_var_normalization
+from pybnn.priors import weight_prior, log_variance_prior
 
 
 def get_default_network(input_dimensionality: int) -> torch.nn.Module:
@@ -283,8 +284,8 @@ class Bohamiann(BaseModel):
         for step, (x_batch, y_batch) in batch_generator:
             sampler.zero_grad()
             loss = self.likelihood_function(input=self.model(x_batch), target=y_batch)
-            # loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
-            # loss -= weight_prior(self.model.parameters()).double() / num_datapoints
+            loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
+            loss -= weight_prior(self.model.parameters()).double() / num_datapoints
             loss.backward()
             sampler.step()
 

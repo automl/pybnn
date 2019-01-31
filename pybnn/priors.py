@@ -1,12 +1,13 @@
 from typing import Iterable
+
 import torch
 
 
 def log_variance_prior(log_variance: torch.Tensor, mean: float = 1e-6, variance: float = 0.01) -> torch.Tensor:
     return torch.mean(
         torch.sum(
-            ((-((log_variance - torch.log(torch.tensor(mean))) ** 2)) /
-             (2. * variance)) - 0.5 * torch.log(torch.tensor(variance)),
+            ((-((log_variance - torch.log(torch.tensor(mean, dtype=log_variance.dtype))) ** 2)) /
+             (2. * variance)) - 0.5 * torch.log(torch.tensor(variance, dtype=log_variance.dtype)),
             dim=1
         )
     )
