@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/automl/pybnn.svg?branch=master)](https://travis-ci.org/automl/pybnn)
+
 # pybnn
 Bayesian neural networks for Bayesian optimization based on pytorch.
 
