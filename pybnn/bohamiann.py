@@ -333,8 +333,15 @@ class Bohamiann(BaseModel):
                            num_burn_in_steps: int = 3000,
                            lr: float = 1e-2,
                            noise: float = 0.,
+                           batch_size: int = 20,
                            mdecay: float = 0.05,
                            verbose=False):
+
+        assert batch_size >= 1, "Invalid batch size. Batches must contain at least a single sample."
+
+        if x_train.shape[0] < batch_size:
+            logging.warning("Not enough datapoints to form a batch. Use all datapoints in each batch")
+            batch_size = x_train.shape[0]
 
         # burn-in
         self.train(x_train, y_train, num_burn_in_steps=num_burn_in_steps, num_steps=num_burn_in_steps,
@@ -346,7 +353,7 @@ class Bohamiann(BaseModel):
         for i in range(num_steps // validate_every_n_steps):
             self.train(x_train, y_train, num_burn_in_steps=0, num_steps=validate_every_n_steps,
                        lr=lr, noise=noise, mdecay=mdecay, verbose=verbose, keep_every=keep_every,
-                       continue_training=True)
+                       continue_training=True, batch_size=batch_size)
             mu, var = self.predict(x_valid)
 
             ll = np.mean(norm.logpdf(y_valid, loc=mu, scale=np.sqrt(var)))
