@@ -10,15 +10,14 @@ import torch.utils.data as data_utils
 from scipy.stats import norm
 
 from pybnn.base_model import BaseModel
+from pybnn.priors import weight_prior, log_variance_prior
 from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD, ConstantSGD
 from pybnn.util.infinite_dataloader import infinite_dataloader
-from pybnn.util.normalization import zero_mean_unit_var_denormalization, zero_mean_unit_var_normalization
-from pybnn.priors import weight_prior, log_variance_prior
 from pybnn.util.layers import AppendLayer
+from pybnn.util.normalization import zero_mean_unit_var_denormalization, zero_mean_unit_var_normalization
 
 
 def get_default_network(input_dimensionality: int) -> torch.nn.Module:
-
     class Architecture(torch.nn.Module):
         def __init__(self, n_inputs, n_hidden=50):
             super(Architecture, self).__init__()
@@ -36,13 +35,13 @@ def get_default_network(input_dimensionality: int) -> torch.nn.Module:
     return Architecture(n_inputs=input_dimensionality)
 
 
-def nll(input, target):
+def nll(input: torch.Tensor, target: torch.Tensor):
     """
     Compute the negative log-likelihood (Gaussian)
 
     :param input: mean and variance predictions of the networks
     :param target: target values
-    :return: torch tensor: negative log-likelihood
+    :return: negative log-likelihood
     """
     batch_size = input.size(0)
 
@@ -71,7 +70,7 @@ class Bohamiann(BaseModel):
                  likelihood_function=nll,
                  print_every_n_steps=512,
                  ) -> None:
-        """ Bayesian Neural Network for regression problems.
+        """
 
         Bayesian Neural Networks use Bayesian methods to estimate the posterior
         distribution of a neural network's weights. This allows to also
@@ -86,14 +85,16 @@ class Bohamiann(BaseModel):
             Bayesian Optimization with Robust Bayesian Neural Networks.
             In Advances in Neural Information Processing Systems 29 (2016).
 
-        Parameters
-        ----------
-        normalize_input: bool, optional
-            Specifies if inputs should be normalized to zero mean and unit variance.
-        normalize_output: bool, optional
-            Specifies whether outputs should be un-normalized.
+        :param get_network: function handle that returns the archtiecture
+        :param normalize_input: defines whether to normalize the inputs
+        :param normalize_output: defines whether to normalize the outputs
+        :param sampling_method: specifies the sampling strategy,
+        options: {sgld, sghmc, adaptive_sghmc, preconditioned_sgld}
+        :param use_double_precision: defines whether to use double or float precisions
+        :param metrics: metrics to evaluate
+        :param likelihood_function: function handle that computes the training loss
+        :param print_every_n_steps: defines after how many the current loss is printed
         """
-
         self.print_every_n_steps = print_every_n_steps
         self.metrics = metrics
         self.do_normalize_input = normalize_input
@@ -106,14 +107,11 @@ class Bohamiann(BaseModel):
         self.likelihood_function = likelihood_function
 
     @property
-    def network_weights(self) -> np.ndarray:
-        """ Extract current network weight values as `np.ndarray`.
+    def network_weights(self) -> tuple:
+        """
+        Extract current network weight values as `np.ndarray`.
 
-        Returns
-        ----------
-        weight_values: tuple
-            Tuple containing current network weight values.
-
+        :return: Tuple containing current network weight values
         """
         return tuple(
             np.asarray(torch.tensor(parameter.data).numpy())
@@ -122,29 +120,12 @@ class Bohamiann(BaseModel):
 
     @network_weights.setter
     def network_weights(self, weights: typing.List[np.ndarray]) -> None:
-        """ Assign new `weights` to our neural networks parameters.
+        """
+        Assign new `weights` to our neural networks parameters.
 
-        Parameters
-        ----------
-        weights : typing.List[np.ndarray]
-            List of weight values to assign.
+        :param weights: List of weight values to assign.
             Individual list elements must have shapes that match
             the network parameters with the same index in `self.network_weights`.
-
-        Examples
-        ----------
-        This serves as a handy bridge between our pytorch parameters
-        and corresponding values for them represented as numpy arrays:
-
-        >>> import numpy as np
-        >>> bnn = BayesianNeuralNetwork()
-        >>> input_dimensionality = 1
-        >>> bnn.model = bnn.network_architecture(input_dimensionality)
-        >>> dummy_weights = [np.random.rand(parameter.shape) for parameter in bnn.model.parameters()]
-        >>> bnn.network_weights = dummy_weights
-        >>> np.allclose(bnn.network_weights, dummy_weights)
-        True
-
         """
         logging.debug("Assigning new network weights")
         for parameter, sample in zip(self.model.parameters(), weights):
@@ -162,27 +143,25 @@ class Bohamiann(BaseModel):
               verbose: bool = False,
               **kwargs):
 
-        """ Train a BNN using input datapoints `x_train` with corresponding targets `y_train`.
-        Parameters
-        ----------
-        x_train : numpy.ndarray (N, D)
-            Input training datapoints.
-        y_train : numpy.ndarray (N,)
-            Input training labels.
-        num_steps: int, optional
-            Number of sampling steps to perform after burn-in is finished.
+        """
+        Train a BNN using input datapoints `x_train` with corresponding targets `y_train`.
+
+        :param x_train: input training datapoints.
+        :param y_train: input training targets.
+        :param num_steps: Number of sampling steps to perform after burn-in is finished.
             In total, `num_steps // keep_every` network weights will be sampled.
-            Defaults to `10000`.
-        num_burn_in_steps: int, optional
-            Number of burn-in steps to perform.
+        :param keep_every: Number of sampling steps (after burn-in) to perform before keeping a sample.
+            In total, `num_steps // keep_every` network weights will be sampled.
+        :param num_burn_in_steps: Number of burn-in steps to perform.
             This value is passed to the given `optimizer` if it supports special
             burn-in specific behavior.
             Networks sampled during burn-in are discarded.
-            Defaults to `3000`.
-        keep_every: int, optional
-            Number of sampling steps (after burn-in) to perform before keeping a sample.
-            In total, `num_steps // keep_every` network weights will be sampled.
-            Defaults to `100`.
+        :param lr: learning rate
+        :param batch_size: batch size
+        :param noise: noise for the sample
+        :param mdecay: momemtum decay
+        :param continue_training: defines whether we want to continue from the last training run
+        :param verbose: verbose output
         """
         logging.debug("Training started.")
         start_time = time.time()
@@ -336,7 +315,29 @@ class Bohamiann(BaseModel):
                            batch_size: int = 20,
                            mdecay: float = 0.05,
                            verbose=False):
+        """
+        Train and validates the neural network
 
+        :param x_train: input training datapoints.
+        :param y_train: input training targets.
+        :param x_valid: validation data points
+        :param y_valid: valdiation targets
+        :param num_steps:  Number of sampling steps to perform after burn-in is finished.
+            In total, `num_steps // keep_every` network weights will be sampled.
+        :param validate_every_n_steps:
+        :param keep_every: Number of sampling steps (after burn-in) to perform before keeping a sample.
+            In total, `num_steps // keep_every` network weights will be sampled.
+        :param num_burn_in_steps: Number of burn-in steps to perform.
+            This value is passed to the given `optimizer` if it supports special
+            burn-in specific behavior.
+            Networks sampled during burn-in are discarded.
+        :param lr: learning rate
+        :param batch_size: batch size
+        :param noise: noise for the sample
+        :param mdecay: momemtum decay
+        :param verbose: verbose output
+
+        """
         assert batch_size >= 1, "Invalid batch size. Batches must contain at least a single sample."
 
         if x_train.shape[0] < batch_size:
@@ -370,12 +371,36 @@ class Bohamiann(BaseModel):
         return n_steps, learning_curve_ll, learning_curve_mse
 
     def normalize_input(self, x, m=None, s=None):
+        """
+        Normalizes input
+
+        :param x: data
+        :param m: mean
+        :param s: standard deviation
+        :return: normalized input
+        """
+
         return zero_mean_unit_var_normalization(x, m, s)
 
     def normalize_output(self, x, m=None, s=None):
+        """
+        Normalizes output
+
+        :param x: targets
+        :param m: mean
+        :param s: standard deviation
+        :return: normalized targets
+        """
         return zero_mean_unit_var_normalization(x, m, s)
 
     def predict(self, x_test: np.ndarray, return_individual_predictions: bool = False):
+        """
+        Predicts mean and variance for the given test point
+
+        :param x_test: test datapoint
+        :param return_individual_predictions: if True also the predictions of the individual models are returned
+        :return: mean and variance
+        """
         x_test_ = np.asarray(x_test)
 
         if self.do_normalize_input:
@@ -419,6 +444,13 @@ class Bohamiann(BaseModel):
         return mean_prediction, variance_prediction
 
     def predict_single(self, x_test: np.ndarray, sample_index: int):
+        """
+        Compute the prediction of a single weight sample
+
+        :param x_test: test datapoint
+        :param sample_index: specifies the index of the weight sample
+        :return: mean and variance of the neural network
+        """
         x_test_ = np.asarray(x_test)
 
         if self.do_normalize_input:
