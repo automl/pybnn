@@ -234,7 +234,7 @@ class Bohamiann(BaseModel):
         train_loader = infinite_dataloader(
             data_utils.DataLoader(
                 data_utils.TensorDataset(x_train_, y_train_),
-                batch_size=self.batch_size,
+                batch_size=batch_size,
                 shuffle=True
             )
         )
@@ -275,7 +275,7 @@ class Bohamiann(BaseModel):
                             lr=dtype(lr))
         elif self.sampling_method == "constant_sgd":
             sampler = ConstantSGD(self.model.parameters(),
-                                  batch_size=self.batch_size,
+                                  batch_size=batch_size,
                                   num_data_points=num_datapoints)
 
         batch_generator = islice(enumerate(train_loader), num_steps)
@@ -292,10 +292,10 @@ class Bohamiann(BaseModel):
                 total_nll = 0
                 total_mse = 0
 
-                n_batches = x_train_.shape[0] // self.batch_size
+                n_batches = x_train_.shape[0] // batch_size
                 for i in range(n_batches):
-                    x_batch = x_train_[(i * self.batch_size):((i + 1) * self.batch_size)]
-                    y_batch = y_train_[(i * self.batch_size):((i + 1) * self.batch_size)]
+                    x_batch = x_train_[(i * batch_size):((i + 1) * batch_size)]
+                    y_batch = y_train_[(i * batch_size):((i + 1) * batch_size)]
                     # mu, var = self.predict(x_batch)
                     f = self.model(x_batch)
                     total_nll += torch.mean(self.likelihood_function(f, y_batch)).data.numpy()
