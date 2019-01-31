@@ -14,37 +14,36 @@ from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD, Consta
 from pybnn.util.infinite_dataloader import infinite_dataloader
 from pybnn.util.normalization import zero_mean_unit_var_denormalization, zero_mean_unit_var_normalization
 from pybnn.priors import weight_prior, log_variance_prior
+from pybnn.util.layers import AppendLayer
 
 
 def get_default_network(input_dimensionality: int) -> torch.nn.Module:
-    class AppendLayer(nn.Module):
-        def __init__(self, bias=True, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            if bias:
-                self.bias = nn.Parameter(torch.DoubleTensor(1, 1))
-            else:
-                self.register_parameter('bias', None)
 
-        def forward(self, x):
-            return torch.cat((x, self.bias * torch.ones_like(x)), dim=1)
+    class Architecture(torch.nn.Module):
+        def __init__(self, n_inputs, n_hidden=50):
+            super(Architecture, self).__init__()
+            self.fc1 = torch.nn.Linear(n_inputs, n_hidden)
+            self.fc2 = torch.nn.Linear(n_hidden, n_hidden)
+            self.fc3 = torch.nn.Linear(n_hidden, 1)
+            self.log_std = AppendLayer(noise=1e-3)
 
-    def init_weights(module):
-        if type(module) == AppendLayer:
-            nn.init.constant_(module.bias, val=np.log(1e-3))
-        elif type(module) == nn.Linear:
-            nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="linear")
-            nn.init.constant_(module.bias, val=0.0)
+        def forward(self, input):
+            x = torch.tanh(self.fc1(input))
+            x = torch.tanh(self.fc2(x))
+            x = self.fc3(x)
+            return self.log_std(x)
 
-    return nn.Sequential(
-        nn.Linear(input_dimensionality, 50), nn.Tanh(),
-        nn.Linear(50, 50), nn.Tanh(),
-        nn.Linear(50, 50), nn.Tanh(),
-        nn.Linear(50, 1),
-        AppendLayer()
-    ).apply(init_weights)
+    return Architecture(n_inputs=input_dimensionality)
 
 
 def nll(input, target):
+    """
+    Compute the negative log-likelihood (Gaussian)
+
+    :param input: mean and variance predictions of the networks
+    :param target: target values
+    :return: torch tensor: negative log-likelihood
+    """
     batch_size = input.size(0)
 
     prediction_mean = input[:, 0].view((-1, 1))
