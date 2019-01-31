@@ -5,12 +5,7 @@ python:
   - "3.5"
   - "3.6"
 install:
-  - pip install torch
-  - pip install numpy
-  - pip install torchvision
-  - pip install scipy
-  - pip install emcee
-  - travis_wait pip install -r requirements.txt
+  - pip install -r requirements.txt
   - python setup.py install
   - pip install coveralls
 script:
