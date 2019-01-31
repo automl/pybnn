@@ -63,7 +63,6 @@ def nll(input, target):
 class Bohamiann(BaseModel):
     def __init__(self,
                  get_network=get_default_network,
-                 batch_size=20,
                  normalize_input: bool = True,
                  normalize_output: bool = True,
                  sampling_method: str = "adaptive_sghmc",
@@ -95,9 +94,6 @@ class Bohamiann(BaseModel):
             Specifies whether outputs should be un-normalized.
         """
 
-        assert batch_size >= 1, "Invalid batch size. Batches must contain at least a single sample."
-
-        self.batch_size = batch_size
         self.print_every_n_steps = print_every_n_steps
         self.metrics = metrics
         self.do_normalize_input = normalize_input
@@ -159,6 +155,7 @@ class Bohamiann(BaseModel):
               keep_every: int = 100,
               num_burn_in_steps: int = 3000,
               lr: float = 1e-5,
+              batch_size=20,
               noise: float = 0.,
               mdecay: float = 0.05,
               continue_training: bool = False,
@@ -195,6 +192,11 @@ class Bohamiann(BaseModel):
             "Processing %d training datapoints "
             " with % dimensions each." % (num_datapoints, input_dimensionality)
         )
+        assert batch_size >= 1, "Invalid batch size. Batches must contain at least a single sample."
+
+        if x_train.shape[0] < batch_size:
+            logging.WARNING("Not enough datapoints to form a batch. Use all datapoints in each batch")
+            batch_size = x_train.shape[0]
 
         self.X = x_train
         self.y = y_train
