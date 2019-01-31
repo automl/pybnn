@@ -195,7 +195,7 @@ class Bohamiann(BaseModel):
         assert batch_size >= 1, "Invalid batch size. Batches must contain at least a single sample."
 
         if x_train.shape[0] < batch_size:
-            logging.WARNING("Not enough datapoints to form a batch. Use all datapoints in each batch")
+            logging.warning("Not enough datapoints to form a batch. Use all datapoints in each batch")
             batch_size = x_train.shape[0]
 
         self.X = x_train
