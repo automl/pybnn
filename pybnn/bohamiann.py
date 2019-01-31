@@ -267,12 +267,18 @@ class Bohamiann(BaseModel):
             loss.backward()
             sampler.step()
 
-            if verbose and step > num_burn_in_steps and step % self.print_every_n_steps == 0:
+            if verbose and step > 0 and step % self.print_every_n_steps == 0:
 
-                mu, var = self.predict(x_train)
-
-                total_nll = -np.mean(norm.logpdf(y_train, loc=mu, scale=np.sqrt(var)))
-                total_mse = np.mean((y_train - mu) ** 2)
+                # compute the training performance of the ensemble
+                if len(self.sampled_weights) > 1:
+                    mu, var = self.predict(x_train)
+                    total_nll = -np.mean(norm.logpdf(y_train, loc=mu, scale=np.sqrt(var)))
+                    total_mse = np.mean((y_train - mu) ** 2)
+                # in case we do not have an ensemble we compute the performance of the last weight sample
+                else:
+                    f = self.model(x_train_)
+                    total_nll = self.likelihood_function(f, y_train_).data.numpy()
+                    total_mse = torch.mean((f[:, 0] - y_train_) ** 2).data.numpy()
 
                 t = time.time() - start_time
 
