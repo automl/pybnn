@@ -1,10 +1,9 @@
 language: python
+os:
+  - linux
 python:
   - "3.5"
   - "3.6"
- os:
-  - linux
-
 install:
   - pip install torch
   - pip install numpy
@@ -15,4 +14,4 @@ install:
   - python setup.py install
   - pip install coveralls
 script:
-- python -m pytest
+  - python -m pytest
