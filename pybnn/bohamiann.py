@@ -267,21 +267,12 @@ class Bohamiann(BaseModel):
             loss.backward()
             sampler.step()
 
-            if verbose and step > 0 and step % self.print_every_n_steps == 0:
-                total_nll = 0
-                total_mse = 0
+            if verbose and step > num_burn_in_steps and step % self.print_every_n_steps == 0:
 
-                n_batches = x_train_.shape[0] // batch_size
-                for i in range(n_batches):
-                    x_batch = x_train_[(i * batch_size):((i + 1) * batch_size)]
-                    y_batch = y_train_[(i * batch_size):((i + 1) * batch_size)]
-                    # mu, var = self.predict(x_batch)
-                    f = self.model(x_batch)
-                    total_nll += torch.mean(self.likelihood_function(f, y_batch)).data.numpy()
-                    total_mse += torch.mean((f[:, 0] - y_batch) ** 2).data.numpy()
+                mu, var = self.predict(x_train)
 
-                total_nll /= n_batches
-                total_mse /= n_batches
+                total_nll = -np.mean(norm.logpdf(y_train, loc=mu, scale=np.sqrt(var)))
+                total_mse = np.mean((y_train - mu) ** 2)
 
                 t = time.time() - start_time
 
@@ -355,6 +346,7 @@ class Bohamiann(BaseModel):
             self.train(x_train, y_train, num_burn_in_steps=0, num_steps=validate_every_n_steps,
                        lr=lr, noise=noise, mdecay=mdecay, verbose=verbose, keep_every=keep_every,
                        continue_training=True, batch_size=batch_size)
+
             mu, var = self.predict(x_valid)
 
             ll = np.mean(norm.logpdf(y_valid, loc=mu, scale=np.sqrt(var)))
@@ -366,7 +358,7 @@ class Bohamiann(BaseModel):
             n_steps.append(step)
 
             if verbose:
-                print("Validate : LL = {:11.4e} MSE = {:.4e}".format(ll, mse))
+                print("Validate : NLL = {:11.4e} MSE = {:.4e}".format(-ll, mse))
 
         return n_steps, learning_curve_ll, learning_curve_mse
 
