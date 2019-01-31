@@ -14,5 +14,5 @@ install:
   - travis_wait pip install -r requirements.txt
   - python setup.py install
   - pip install coveralls
-script: coverage run --source=pybnn -m unittest discover test -v
-after_success: coveralls
+script:
+- python -m pytest
