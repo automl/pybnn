@@ -3,12 +3,10 @@ import numpy as np
 from torch.optim import Optimizer
 
 
-# Pytorch Port of a previous tensorflow implementation in `tensorflow_probability`:
-# https://github.com/tensorflow/probability/blob/master/tensorflow_probability/g3doc/api_docs/python/tfp/optimizer/StochasticGradientLangevinDynamics.md
 class PreconditionedSGLD(Optimizer):
     """ Stochastic Gradient Langevin Dynamics Sampler with preconditioning.
         Optimization variable is viewed as a posterior sample under Stochastic
-        Gradient Langevin Dynamics with noise rescaled in eaach dimension
+        Gradient Langevin Dynamics with noise rescaled in each dimension
         according to RMSProp.
     """
     def __init__(self,
@@ -30,17 +28,7 @@ class PreconditionedSGLD(Optimizer):
         precondition_decay_rate : float, optional
             Exponential decay rate of the rescaling of the preconditioner (RMSprop).
             Should be smaller than but nearly `1` to approximate sampling from the posterior.
-            Default: `0.95`
-        num_pseudo_batches : int, optional
-            Effective number of minibatches in the data set.
-            Trades off noise and prior with the SGD likelihood term.
-            Note: Assumes loss is taken as mean over a minibatch.
-            Otherwise, if the sum was taken, divide this number by the batch size.
-            Default: `1`.
-        num_burn_in_steps : int, optional
-            Number of iterations to collect gradient statistics to update the
-            preconditioner before starting to draw noisy samples.
-            Default: `3000`.
+            Default: `0.99`
         diagonal_bias : float, optional
             Term added to the diagonal of the preconditioner to prevent it from
             degenerating.
