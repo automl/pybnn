@@ -66,14 +66,14 @@ class SGLD(Optimizer):
 
                 state = self.state[parameter]
                 lr, scale_grad = group["lr"], group["scale_grad"]
-                gradient = parameter.grad.data
-
+                # the average gradient over the batch, i.e N/n sum_i g_theta_i + g_prior
+                gradient = parameter.grad.data * scale_grad
                 #  State initialization
                 if len(state) == 0:
                     state["iteration"] = 0
 
                 sigma = torch.sqrt(torch.from_numpy(np.array(lr, dtype=type(lr))))
-                delta = (0.5 * lr * gradient * scale_grad +
+                delta = (0.5 * lr * gradient +
                          sigma * torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient)))
 
                 parameter.data.add_(-delta)

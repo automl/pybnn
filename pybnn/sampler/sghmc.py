@@ -1,5 +1,5 @@
 import torch
-
+import numpy as np
 from torch.optim import Optimizer
 
 
@@ -32,14 +32,6 @@ class SGHMC(Optimizer):
             Base learning rate for this optimizer.
             Must be tuned to the specific function being minimized.
             Default: `1e-2`.
-        num_burn_in_steps: int, optional
-            Number of burn-in steps to perform. In each burn-in step, this
-            sampler will adapt its own internal parameters to decrease its error.
-            Set to `0` to turn scale adaption off.
-            Default: `3000`.
-        noise: float, optional
-            (Constant) per-parameter noise level.
-            Default: `0.`.
         mdecay:float, optional
             (Constant) momentum decay per time-step.
             Default: `0.05`.
@@ -76,24 +68,27 @@ class SGHMC(Optimizer):
 
                 if len(state) == 0:
                     state["iteration"] = 0
-                    state["momentum"] = torch.zeros_like(parameter)
+                    # state["momentum"] = torch.zeros_like(parameter)
+                    state["momentum"] = torch.randn(parameter.size(), dtype=parameter.dtype)
 
                 state["iteration"] += 1
 
                 mdecay, lr, wd = group["mdecay"], group["lr"], group["wd"]
-                scale_grad = torch.tensor(group["scale_grad"])
+                scale_grad = group["scale_grad"]
 
                 momentum = state["momentum"]
-                gradient = parameter.grad.data
+                gradient = parameter.grad.data * scale_grad
 
-                sigma = torch.sqrt(2 * lr * mdecay / scale_grad)
-                sample_t = torch.normal(mean=0., std=sigma)
+                # sigma = torch.sqrt(2 * lr * mdecay / scale_grad)
+                sigma = torch.sqrt(torch.from_numpy(np.array(2 * lr * mdecay, dtype=type(lr))))
+                sample_t = torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient) * sigma)
                 # momentum_update = (1 - mdecay) * momentum - lr * gradient + sample_t #- lr * wd * parameter.data
 
-                momentum_t = momentum.add_(
-                    - lr * gradient - mdecay * momentum + sample_t
-                )
+                # momentum_t = momentum.add_(
+                #     - lr * gradient - mdecay * momentum + sample_t
+                # )
 
-                parameter.data.add_(momentum_t)
-
+                # parameter.data.add_(momentum_t)
+                parameter.data.add_(lr * momentum)
+                momentum.add_(-lr * gradient - mdecay * momentum + sample_t)
         return loss

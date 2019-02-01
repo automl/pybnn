@@ -37,7 +37,7 @@ def get_default_network(input_dimensionality: int) -> torch.nn.Module:
 
 def nll(input: torch.Tensor, target: torch.Tensor):
     """
-    Compute the negative log-likelihood (Gaussian)
+    computes the average negative log-likelihood (Gaussian)
 
     :param input: mean and variance predictions of the networks
     :param target: target values
@@ -262,6 +262,9 @@ class Bohamiann(BaseModel):
         for step, (x_batch, y_batch) in batch_generator:
             sampler.zero_grad()
             loss = self.likelihood_function(input=self.model(x_batch), target=y_batch)
+            # add prior. Note the gradient is computed by: g_prior + N/n sum_i grad_theta_xi see Eq 4
+            # in Welling and Whye The 2011. Because of that we divide here by N=num of datpoints since
+            # in the sample we rescale the gradient by N again
             loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
             loss -= weight_prior(self.model.parameters()).double() / num_datapoints
             loss.backward()
@@ -277,8 +280,16 @@ class Bohamiann(BaseModel):
                 # in case we do not have an ensemble we compute the performance of the last weight sample
                 else:
                     f = self.model(x_train_)
-                    total_nll = self.likelihood_function(f, y_train_).data.numpy()
-                    total_mse = torch.mean((f[:, 0] - y_train_) ** 2).data.numpy()
+
+                    if self.do_normalize_output:
+                        mu = zero_mean_unit_var_denormalization(f[:, 0], self.y_mean, self.y_std).data.numpy()
+                        var = torch.exp(f[:, 1]) * self.y_std ** 2
+                        var = var.data.numpy()
+                    else:
+                        mu = f[:, 0].data.numpy()
+                        var = f[:, 1].data.numpy()
+                    total_nll = -np.mean(norm.logpdf(y_train, loc=mu, scale=np.sqrt(var)))
+                    total_mse = np.mean((y_train - mu) ** 2)
 
                 t = time.time() - start_time
 
@@ -419,10 +430,10 @@ class Bohamiann(BaseModel):
         ])
 
         mean_prediction = np.mean(network_outputs[:, :, 0], axis=0)
-        variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2, axis=0)
+        # variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2, axis=0)
         # Total variance
-        # variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + np.exp(network_outputs[:, :, 1]),
-        #                               axis=0) - mean_prediction ** 2
+        variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + np.exp(network_outputs[:, :, 1]),
+                                      axis=0) - mean_prediction ** 2
 
         if self.do_normalize_output:
 
