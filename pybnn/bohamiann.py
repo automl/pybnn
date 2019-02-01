@@ -137,7 +137,7 @@ class Bohamiann(BaseModel):
               num_burn_in_steps: int = 3000,
               lr: float = 1e-5,
               batch_size=20,
-              noise: float = 0.,
+              epsilon: float = 1e-10,
               mdecay: float = 0.05,
               continue_training: bool = False,
               verbose: bool = False,
@@ -158,7 +158,7 @@ class Bohamiann(BaseModel):
             Networks sampled during burn-in are discarded.
         :param lr: learning rate
         :param batch_size: batch size
-        :param noise: noise for the sample
+        :param epsilon: epsilon for numerical stability
         :param mdecay: momemtum decay
         :param continue_training: defines whether we want to continue from the last training run
         :param verbose: verbose output
@@ -236,9 +236,10 @@ class Bohamiann(BaseModel):
             sampler = AdaptiveSGHMC(self.model.parameters(),
                                     scale_grad=dtype(num_datapoints),
                                     num_burn_in_steps=num_burn_in_steps,
-                                    lr=dtype(np.sqrt(lr)),
+                                    # lr=dtype(np.sqrt(lr)),
+                                    lr=dtype(lr),
                                     mdecay=dtype(mdecay),
-                                    noise=dtype(noise))
+                                    epsilon=dtype(epsilon))
         elif self.sampling_method == "sgld":
             sampler = SGLD(self.model.parameters(),
                            lr=dtype(lr),
@@ -319,7 +320,7 @@ class Bohamiann(BaseModel):
                            keep_every: int = 100,
                            num_burn_in_steps: int = 3000,
                            lr: float = 1e-2,
-                           noise: float = 0.,
+                           epsilon: float = 1e-10,
                            batch_size: int = 20,
                            mdecay: float = 0.05,
                            verbose=False):
@@ -341,7 +342,7 @@ class Bohamiann(BaseModel):
             Networks sampled during burn-in are discarded.
         :param lr: learning rate
         :param batch_size: batch size
-        :param noise: noise for the sample
+        :param epsilon: epsilon for numerical stability
         :param mdecay: momemtum decay
         :param verbose: verbose output
 
@@ -354,14 +355,14 @@ class Bohamiann(BaseModel):
 
         # burn-in
         self.train(x_train, y_train, num_burn_in_steps=num_burn_in_steps, num_steps=num_burn_in_steps,
-                   lr=lr, noise=noise, mdecay=mdecay, verbose=verbose)
+                   lr=lr, epsilon=epsilon, mdecay=mdecay, verbose=verbose)
 
         learning_curve_mse = []
         learning_curve_ll = []
         n_steps = []
         for i in range(num_steps // validate_every_n_steps):
             self.train(x_train, y_train, num_burn_in_steps=0, num_steps=validate_every_n_steps,
-                       lr=lr, noise=noise, mdecay=mdecay, verbose=verbose, keep_every=keep_every,
+                       lr=lr, epsilon=epsilon, mdecay=mdecay, verbose=verbose, keep_every=keep_every,
                        continue_training=True, batch_size=batch_size)
 
             mu, var = self.predict(x_valid)
