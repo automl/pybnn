@@ -87,8 +87,6 @@ class AdaptiveSGHMC(Optimizer):
                     state["tau"] = torch.ones_like(parameter)
                     state["g"] = torch.ones_like(parameter)
                     state["v_hat"] = torch.ones_like(parameter)
-                    # draw random momentum vector
-                    # state["momentum"] = torch.randn(parameter.size(), dtype=parameter.dtype)
                     state["momentum"] = torch.zeros_like(parameter)
                 state["iteration"] += 1
 
