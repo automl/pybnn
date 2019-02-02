@@ -62,7 +62,7 @@ class PreconditionedSGLD(Optimizer):
                 num_train_points = group["num_train_points"]
                 precondition_decay_rate = group["precondition_decay_rate"]  # alpha
                 diagonal_bias = group["diagonal_bias"]  # lambda
-                gradient = parameter.grad.data
+                gradient = parameter.grad.data * num_train_points
 
                 #  state initialization
                 if len(state) == 0:
@@ -82,7 +82,7 @@ class PreconditionedSGLD(Optimizer):
                 # standard deviation of the injected noise
                 sigma = torch.sqrt(torch.from_numpy(np.array(lr, dtype=type(lr)))) * torch.sqrt(preconditioner)
 
-                mean = 0.5 * lr * (preconditioner * gradient * num_train_points)
+                mean = 0.5 * lr * (preconditioner * gradient)
                 delta = (mean + torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient)) * sigma)
 
                 parameter.data.add_(-delta)
