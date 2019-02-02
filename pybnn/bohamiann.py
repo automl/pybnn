@@ -68,7 +68,7 @@ class Bohamiann(BaseModel):
                  use_double_precision: bool = True,
                  metrics=(nn.MSELoss,),
                  likelihood_function=nll,
-                 print_every_n_steps=512,
+                 print_every_n_steps=100,
                  ) -> None:
         """
 
@@ -105,6 +105,7 @@ class Bohamiann(BaseModel):
         self.sampling_method = sampling_method
         self.sampled_weights = []  # type: typing.List[typing.Tuple[np.ndarray]]
         self.likelihood_function = likelihood_function
+        self.sampler = None
 
     @property
     def network_weights(self) -> tuple:
@@ -218,6 +219,11 @@ class Bohamiann(BaseModel):
             )
         )
 
+        if self.use_double_precision:
+            dtype = np.float64
+        else:
+            dtype = np.float32
+
         if not continue_training:
             logging.debug("Clearing list of sampled weights.")
 
@@ -227,41 +233,35 @@ class Bohamiann(BaseModel):
             else:
                 self.model = self.get_network(input_dimensionality=input_dimensionality).float()
 
-        if self.use_double_precision:
-            dtype = np.float64
-        else:
-            dtype = np.float32
-
-        if self.sampling_method == "adaptive_sghmc":
-            sampler = AdaptiveSGHMC(self.model.parameters(),
-                                    scale_grad=dtype(num_datapoints),
-                                    num_burn_in_steps=num_burn_in_steps,
-                                    # lr=dtype(np.sqrt(lr)),
+            if self.sampling_method == "adaptive_sghmc":
+                self.sampler = AdaptiveSGHMC(self.model.parameters(),
+                                             scale_grad=dtype(num_datapoints),
+                                             num_burn_in_steps=num_burn_in_steps,
+                                             lr=dtype(lr),
+                                             mdecay=dtype(mdecay),
+                                             epsilon=dtype(epsilon))
+            elif self.sampling_method == "sgld":
+                self.sampler = SGLD(self.model.parameters(),
                                     lr=dtype(lr),
-                                    mdecay=dtype(mdecay),
-                                    epsilon=dtype(epsilon))
-        elif self.sampling_method == "sgld":
-            sampler = SGLD(self.model.parameters(),
-                           lr=dtype(lr),
-                           scale_grad=num_datapoints)
-        elif self.sampling_method == "preconditioned_sgld":
-            sampler = PreconditionedSGLD(self.model.parameters(),
-                                         lr=dtype(lr),
-                                         num_train_points=num_datapoints)
-        elif self.sampling_method == "sghmc":
-            sampler = SGHMC(self.model.parameters(),
-                            scale_grad=dtype(num_datapoints),
-                            mdecay=dtype(mdecay),
-                            lr=dtype(lr))
-        elif self.sampling_method == "constant_sgd":
-            sampler = ConstantSGD(self.model.parameters(),
-                                  batch_size=batch_size,
-                                  num_data_points=num_datapoints)
+                                    scale_grad=num_datapoints)
+            elif self.sampling_method == "preconditioned_sgld":
+                self.sampler = PreconditionedSGLD(self.model.parameters(),
+                                                  lr=dtype(lr),
+                                                  num_train_points=num_datapoints)
+            elif self.sampling_method == "sghmc":
+                self.sampler = SGHMC(self.model.parameters(),
+                                     scale_grad=dtype(num_datapoints),
+                                     mdecay=dtype(mdecay),
+                                     lr=dtype(lr))
+            elif self.sampling_method == "constant_sgd":
+                self.sampler = ConstantSGD(self.model.parameters(),
+                                           batch_size=batch_size,
+                                           num_data_points=num_datapoints)
 
         batch_generator = islice(enumerate(train_loader), num_steps)
 
         for step, (x_batch, y_batch) in batch_generator:
-            sampler.zero_grad()
+            self.sampler.zero_grad()
             loss = self.likelihood_function(input=self.model(x_batch), target=y_batch)
             # add prior. Note the gradient is computed by: g_prior + N/n sum_i grad_theta_xi see Eq 4
             # in Welling and Whye The 2011. Because of that we divide here by N=num of datpoints since
@@ -269,7 +269,7 @@ class Bohamiann(BaseModel):
             loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
             loss -= weight_prior(self.model.parameters()).double() / num_datapoints
             loss.backward()
-            sampler.step()
+            self.sampler.step()
 
             if verbose and step > 0 and step % self.print_every_n_steps == 0:
 

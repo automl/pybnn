@@ -100,10 +100,7 @@ class AdaptiveSGHMC(Optimizer):
                 gradient = parameter.grad.data * scale_grad
 
                 tau_inv = 1. / (tau + 1.)
-                # tau_inv = 1. / tau
 
-                # print("iter %d" % len(state))
-                # print(minv_t)
                 # update parameters during burn-in
                 if state["iteration"] <= group["num_burn_in_steps"]:
                     tau.add_(- tau * (g * g / (v_hat + epsilon)) + 1)  # specifies the moving average window, see Eq 9 in [1] left
@@ -111,19 +108,8 @@ class AdaptiveSGHMC(Optimizer):
                     v_hat.add_(-v_hat * tau_inv + tau_inv * (gradient ** 2))  # gradient variance see Eq 8 in [1]
 
                 minv_t = 1. / (torch.sqrt(v_hat) + epsilon)  # preconditioner
-                lr_scaled = lr #/ torch.sqrt(scale_grad)
-                # print(tau, g, v_hat)
 
-                # epsilon_var = (
-                #     2. * (lr_scaled ** 2) * mdecay * minv_t -
-                #     2. * (lr_scaled ** 3) * (minv_t ** 2) * epsilon -
-                #     (lr_scaled ** 4)
-                # )
-                epsilon_var = (
-                    2. * (lr_scaled ** 2) * mdecay * minv_t -
-                    # 2. * (lr_scaled ** 3) * (minv_t ** 2) * epsilon -
-                    (lr_scaled ** 4)
-                )
+                epsilon_var = (2. * (lr ** 2) * mdecay * minv_t - (lr ** 4))
 
                 # sample random epsilon
                 sigma = torch.sqrt(torch.clamp(epsilon_var, min=1e-16))
