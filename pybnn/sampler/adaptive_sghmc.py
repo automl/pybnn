@@ -18,15 +18,14 @@ class AdaptiveSGHMC(Optimizer):
             In Proceedings of Machine Learning Research 32 (2014).\n
             `Stochastic Gradient Hamiltonian Monte Carlo <https://arxiv.org/pdf/1402.4102.pdf>`_
     """
-    name = "AdaptiveSGHMC"
 
     def __init__(self,
                  params,
-                 lr: float=1e-2,
-                 num_burn_in_steps: int=3000,
-                 epsilon: float=1e-16,
-                 mdecay: float=0.05,
-                 scale_grad: float=1.) -> None:
+                 lr: float = 1e-2,
+                 num_burn_in_steps: int = 3000,
+                 epsilon: float = 1e-16,
+                 mdecay: float = 0.05,
+                 scale_grad: float = 1.) -> None:
         """ Set up a SGHMC Optimizer.
 
         Parameters
@@ -101,7 +100,8 @@ class AdaptiveSGHMC(Optimizer):
 
                 # update parameters during burn-in
                 if state["iteration"] <= group["num_burn_in_steps"]:
-                    tau.add_(- tau * (g * g / (v_hat + epsilon)) + 1)  # specifies the moving average window, see Eq 9 in [1] left
+                    tau.add_(- tau * (
+                            g * g / (v_hat + epsilon)) + 1)  # specifies the moving average window, see Eq 9 in [1] left
                     g.add_(-g * tau_inv + tau_inv * gradient)  # average gradient see Eq 9 in [1] right
                     v_hat.add_(-v_hat * tau_inv + tau_inv * (gradient ** 2))  # gradient variance see Eq 8 in [1]
 
