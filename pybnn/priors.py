@@ -1,5 +1,5 @@
 from typing import Iterable
-
+import numpy as np
 import torch
 
 
@@ -13,15 +13,12 @@ def log_variance_prior(log_variance: torch.Tensor, mean: float = 1e-6, variance:
     )
 
 
-def weight_prior(parameters: Iterable[torch.Tensor], wdecay: float = 1.) -> torch.Tensor:
-    num_parameters = torch.sum(torch.tensor([
-        torch.prod(torch.tensor(parameter.size()))
-        for parameter in parameters
-    ]))
+def weight_prior(parameters: Iterable[torch.Tensor], dtype=np.float64, wdecay: float = 1.) -> torch.Tensor:
 
-    log_likelihood = torch.sum(torch.tensor([
-        torch.sum(-wdecay * 0.5 * (parameter ** 2))
-        for parameter in parameters
-    ]))
+    num_parameters = 0
+    log_likelihood = torch.from_numpy(np.array(0, dtype=dtype))
+    for parameter in parameters:
+        num_parameters += parameter.numel()
+        log_likelihood += torch.sum(-wdecay * 0.5 * (parameter ** 2))
 
-    return log_likelihood / (num_parameters.float() + 1e-16)
+    return log_likelihood / num_parameters

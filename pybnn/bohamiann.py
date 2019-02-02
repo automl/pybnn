@@ -264,10 +264,10 @@ class Bohamiann(BaseModel):
             self.sampler.zero_grad()
             loss = self.likelihood_function(input=self.model(x_batch), target=y_batch)
             # add prior. Note the gradient is computed by: g_prior + N/n sum_i grad_theta_xi see Eq 4
-            # in Welling and Whye The 2011. Because of that we divide here by N=num of datpoints since
+            # in Welling and Whye The 2011. Because of that we divide here by N=num of datapoints since
             # in the sample we rescale the gradient by N again
             loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
-            loss -= weight_prior(self.model.parameters()).double() / num_datapoints
+            loss -= weight_prior(self.model.parameters(), dtype=dtype) / num_datapoints
             loss.backward()
             self.sampler.step()
 
