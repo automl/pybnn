@@ -433,8 +433,10 @@ class Bohamiann(BaseModel):
         mean_prediction = np.mean(network_outputs[:, :, 0], axis=0)
         # variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2, axis=0)
         # Total variance
-        variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + np.exp(network_outputs[:, :, 1]),
-                                      axis=0) - mean_prediction ** 2
+
+        variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2
+                                       + np.exp(network_outputs[:, :, 1]), axis=0)
+
 
         if self.do_normalize_output:
 
