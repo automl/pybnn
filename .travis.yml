@@ -6,6 +6,10 @@ python:
 install:
   - pip install -r requirements.txt
   - python setup.py install
-  - pip install coveralls
+  - pip install codecov
+  - pip install pytest pytest-cov
+
 script:
-  - python -m pytest
+  - pytest --cov=./  
+after_success:
+- codecov
