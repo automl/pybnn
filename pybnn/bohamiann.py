@@ -11,7 +11,7 @@ from scipy.stats import norm
 
 from pybnn.base_model import BaseModel
 from pybnn.priors import weight_prior, log_variance_prior
-from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD, ConstantSGD
+from pybnn.sampler import AdaptiveSGHMC, SGLD, SGHMC, PreconditionedSGLD
 from pybnn.util.infinite_dataloader import infinite_dataloader
 from pybnn.util.layers import AppendLayer
 from pybnn.util.normalization import zero_mean_unit_var_denormalization, zero_mean_unit_var_normalization
@@ -253,17 +253,13 @@ class Bohamiann(BaseModel):
                                      scale_grad=dtype(num_datapoints),
                                      mdecay=dtype(mdecay),
                                      lr=dtype(lr))
-            elif self.sampling_method == "constant_sgd":
-                self.sampler = ConstantSGD(self.model.parameters(),
-                                           batch_size=batch_size,
-                                           num_data_points=num_datapoints)
 
         batch_generator = islice(enumerate(train_loader), num_steps)
 
         for step, (x_batch, y_batch) in batch_generator:
             self.sampler.zero_grad()
             loss = self.likelihood_function(input=self.model(x_batch), target=y_batch)
-            # add prior. Note the gradient is computed by: g_prior + N/n sum_i grad_theta_xi see Eq 4
+            # Add prior. Note the gradient is computed by: g_prior + N/n sum_i grad_theta_xi see Eq 4
             # in Welling and Whye The 2011. Because of that we divide here by N=num of datapoints since
             # in the sample we rescale the gradient by N again
             loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
@@ -433,10 +429,8 @@ class Bohamiann(BaseModel):
         mean_prediction = np.mean(network_outputs[:, :, 0], axis=0)
         # variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2, axis=0)
         # Total variance
-
         variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2
-                                       + np.exp(network_outputs[:, :, 1]), axis=0)
-
+                                      + np.exp(network_outputs[:, :, 1]), axis=0)
 
         if self.do_normalize_output:
 
