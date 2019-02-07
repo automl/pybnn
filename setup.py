@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pybnn',
-    version='0.0.1',
+    version='0.0.2',
     description='Simple python framework for Bayesian neural networks',
     author='Aaron Klein, Moritz Freidank',
     author_email='kleinaa@cs.uni-freiburg.de',
