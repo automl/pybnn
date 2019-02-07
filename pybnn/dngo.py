@@ -236,8 +236,9 @@ class DNGO(BaseModel):
                 # the next iteration
                 self.p0 = pos
 
-                # Take the last samples from each walker
-                self.hypers = np.exp(self.sampler.chain[:, -1])
+                # Take the last samples from each walker set them back on a linear scale
+                linear_theta = np.exp(self.sampler.chain[:, -1])
+                self.hypers = linear_theta
                 self.hypers[:, 1] = 1 / self.hypers[:, 1]
             else:
                 # Optimize hyperparameters of the Bayesian linear regression
@@ -274,8 +275,11 @@ class DNGO(BaseModel):
         float
             lnlikelihood + prior
         """
+        if np.any(theta == np.inf):
+            return -np.inf
+
         if np.any((-10 > theta) + (theta > 10)):
-            return -1e25
+            return -np.inf
 
         alpha = np.exp(theta[0])
         beta = 1 / np.exp(theta[1])
