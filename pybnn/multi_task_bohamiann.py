@@ -36,7 +36,6 @@ class MultiTaskBohamiann(Bohamiann):
     def __init__(self,
                  n_tasks: int,
                  get_network=get_multitask_network,
-                 batch_size=20,
                  normalize_input: bool = True,
                  normalize_output: bool = True,
                  use_double_precision: bool = True,
@@ -68,7 +67,7 @@ class MultiTaskBohamiann(Bohamiann):
         self.n_tasks = n_tasks
 
         func = partial(get_network, n_tasks=n_tasks)
-        super(MultiTaskBohamiann, self).__init__(func, batch_size, normalize_output, normalize_input,
+        super(MultiTaskBohamiann, self).__init__(func, normalize_output, normalize_input,
                                                  sampling_method, metrics, use_double_precision)
 
     def normalize_input(self, x, m=None, s=None):

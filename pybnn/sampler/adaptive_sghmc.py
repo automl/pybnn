@@ -18,15 +18,14 @@ class AdaptiveSGHMC(Optimizer):
             In Proceedings of Machine Learning Research 32 (2014).\n
             `Stochastic Gradient Hamiltonian Monte Carlo <https://arxiv.org/pdf/1402.4102.pdf>`_
     """
-    name = "AdaptiveSGHMC"
 
     def __init__(self,
                  params,
-                 lr: float=1e-2,
-                 num_burn_in_steps: int=3000,
-                 noise: float=0.,
-                 mdecay: float=0.05,
-                 scale_grad: float=1.) -> None:
+                 lr: float = 1e-2,
+                 num_burn_in_steps: int = 3000,
+                 epsilon: float = 1e-16,
+                 mdecay: float = 0.05,
+                 scale_grad: float = 1.) -> None:
         """ Set up a SGHMC Optimizer.
 
         Parameters
@@ -42,14 +41,14 @@ class AdaptiveSGHMC(Optimizer):
             sampler will adapt its own internal parameters to decrease its error.
             Set to `0` to turn scale adaption off.
             Default: `3000`.
-        noise: float, optional
-            (Constant) per-parameter noise level.
+        epsilon: float, optional
+            (Constant) per-parameter epsilon level.
             Default: `0.`.
         mdecay:float, optional
             (Constant) momentum decay per time-step.
             Default: `0.05`.
         scale_grad: float, optional
-            Value that is used to scale the magnitude of the noise used
+            Value that is used to scale the magnitude of the epsilon used
             during sampling. In a typical batches-of-data setting this usually
             corresponds to the number of examples in the entire dataset.
             Default: `1.0`.
@@ -64,7 +63,7 @@ class AdaptiveSGHMC(Optimizer):
             lr=lr, scale_grad=float(scale_grad),
             num_burn_in_steps=num_burn_in_steps,
             mdecay=mdecay,
-            noise=noise
+            epsilon=epsilon
         )
         super().__init__(params, defaults)
 
@@ -82,61 +81,44 @@ class AdaptiveSGHMC(Optimizer):
 
                 state = self.state[parameter]
 
-                #  State initialization {{{ #
-
                 if len(state) == 0:
                     state["iteration"] = 0
                     state["tau"] = torch.ones_like(parameter)
                     state["g"] = torch.ones_like(parameter)
                     state["v_hat"] = torch.ones_like(parameter)
                     state["momentum"] = torch.zeros_like(parameter)
-                #  }}} State initialization #
-
                 state["iteration"] += 1
 
-                #  Readability {{{ #
-                mdecay, noise, lr = group["mdecay"], group["noise"], group["lr"]
-                scale_grad = torch.tensor(group["scale_grad"])
-
+                mdecay, epsilon, lr = group["mdecay"], group["epsilon"], group["lr"]
+                scale_grad = torch.tensor(group["scale_grad"], dtype=parameter.dtype)
                 tau, g, v_hat = state["tau"], state["g"], state["v_hat"]
+
                 momentum = state["momentum"]
+                gradient = parameter.grad.data * scale_grad
 
-                gradient = parameter.grad.data
-                #  }}} Readability #
+                tau_inv = 1. / (tau + 1.)
 
-                r_t = 1. / (tau + 1.)
-                minv_t = 1. / torch.sqrt(v_hat)
-
-                #  Burn-in updates {{{ #
+                # update parameters during burn-in
                 if state["iteration"] <= group["num_burn_in_steps"]:
-                    # Update state
-                    tau.add_(1. - tau * (g * g / v_hat))
-                    g.add_(-g * r_t + r_t * gradient)
-                    v_hat.add_(-v_hat * r_t + r_t * (gradient ** 2))
-                #  }}} Burn-in updates #
+                    tau.add_(- tau * (
+                            g * g / (v_hat + epsilon)) + 1)  # specifies the moving average window, see Eq 9 in [1] left
+                    g.add_(-g * tau_inv + tau_inv * gradient)  # average gradient see Eq 9 in [1] right
+                    v_hat.add_(-v_hat * tau_inv + tau_inv * (gradient ** 2))  # gradient variance see Eq 8 in [1]
 
-                lr_scaled = lr / torch.sqrt(scale_grad)
+                minv_t = 1. / (torch.sqrt(v_hat) + epsilon)  # preconditioner
 
-                #  Draw random sample {{{ #
+                epsilon_var = (2. * (lr ** 2) * mdecay * minv_t - (lr ** 4))
 
-                noise_scale = (
-                    2. * (lr_scaled ** 2) * mdecay * minv_t -
-                    2. * (lr_scaled ** 3) * (minv_t ** 2) * noise -
-                    (lr_scaled ** 4)
-                )
+                # sample random epsilon
+                sigma = torch.sqrt(torch.clamp(epsilon_var, min=1e-16))
+                sample_t = torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient) * sigma)
 
-                sigma = torch.sqrt(torch.clamp(noise_scale, min=1e-16))
-
-                # sample_t = torch.normal(mean=0., std=torch.tensor(1.)) * sigma
-                sample_t = torch.normal(mean=0., std=sigma)
-                #  }}} Draw random sample #
-
-                #  SGHMC Update {{{ #
-                momentum_t = momentum.add_(
+                # update momentum (Eq 10 right in [1])
+                momentum.add_(
                     - (lr ** 2) * minv_t * gradient - mdecay * momentum + sample_t
                 )
 
-                parameter.data.add_(momentum_t)
-                #  }}} SGHMC Update #
+                # update theta (Eq 10 left in [1])
+                parameter.data.add_(momentum)
 
         return loss

@@ -38,8 +38,8 @@ class Net(nn.Module):
 
 class DNGO(BaseModel):
 
-    def __init__(self, batch_size=10, num_epochs=20000,
-                 learning_rate=0.001,
+    def __init__(self, batch_size=10, num_epochs=500,
+                 learning_rate=0.01,
                  adapt_epoch=5000, n_units_1=50, n_units_2=50, n_units_3=50,
                  alpha=1.0, beta=1000, prior=None, do_mcmc=True,
                  n_hypers=20, chain_length=2000, burnin_steps=2000,
@@ -208,11 +208,6 @@ class DNGO(BaseModel):
             logging.debug("Epoch time {:.3f}s, total time {:.3f}s".format(epoch_time, total_time))
             logging.debug("Training loss:\t\t{:.5g}".format(train_err / train_batches))
 
-            # # Adapt the learning rate
-            # if epoch % self.adapt_epoch == 0:
-            #     self.learning_rate.set_value(
-            #         np.float32(self.init_learning_rate * 0.1))
-
         # Design matrix
         self.Theta = self.network.basis_funcs(torch.Tensor(self.X)).data.numpy()
 
@@ -241,8 +236,9 @@ class DNGO(BaseModel):
                 # the next iteration
                 self.p0 = pos
 
-                # Take the last samples from each walker
-                self.hypers = np.exp(self.sampler.chain[:, -1])
+                # Take the last samples from each walker set them back on a linear scale
+                linear_theta = np.exp(self.sampler.chain[:, -1])
+                self.hypers = linear_theta
                 self.hypers[:, 1] = 1 / self.hypers[:, 1]
             else:
                 # Optimize hyperparameters of the Bayesian linear regression
@@ -279,8 +275,11 @@ class DNGO(BaseModel):
         float
             lnlikelihood + prior
         """
+        if np.any(theta == np.inf):
+            return -np.inf
+
         if np.any((-10 > theta) + (theta > 10)):
-            return -1e25
+            return -np.inf
 
         alpha = np.exp(theta[0])
         beta = 1 / np.exp(theta[1])
@@ -299,12 +298,11 @@ class DNGO(BaseModel):
         mll -= N / 2 * np.log(2 * np.pi)
         mll -= beta / 2. * np.linalg.norm(self.y - np.dot(self.Theta, m), 2)
         mll -= alpha / 2. * np.dot(m.T, m)
-        mll -= 0.5 * np.log(np.linalg.det(K) + 1e-20)
+        mll -= 0.5 * np.log(np.linalg.det(K) + 1e-10)
 
+        if np.any(np.isnan(mll)):
+            return -1e25
         return mll
-        # l = mll + self.prior.lnprob(theta)
-        #
-        # return l
 
     def negative_mll(self, theta):
         """

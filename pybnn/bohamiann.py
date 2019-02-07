@@ -37,7 +37,7 @@ def get_default_network(input_dimensionality: int) -> torch.nn.Module:
 
 def nll(input: torch.Tensor, target: torch.Tensor):
     """
-    Compute the negative log-likelihood (Gaussian)
+    computes the average negative log-likelihood (Gaussian)
 
     :param input: mean and variance predictions of the networks
     :param target: target values
@@ -68,7 +68,7 @@ class Bohamiann(BaseModel):
                  use_double_precision: bool = True,
                  metrics=(nn.MSELoss,),
                  likelihood_function=nll,
-                 print_every_n_steps=512,
+                 print_every_n_steps=100,
                  ) -> None:
         """
 
@@ -105,6 +105,7 @@ class Bohamiann(BaseModel):
         self.sampling_method = sampling_method
         self.sampled_weights = []  # type: typing.List[typing.Tuple[np.ndarray]]
         self.likelihood_function = likelihood_function
+        self.sampler = None
 
     @property
     def network_weights(self) -> tuple:
@@ -137,7 +138,7 @@ class Bohamiann(BaseModel):
               num_burn_in_steps: int = 3000,
               lr: float = 1e-5,
               batch_size=20,
-              noise: float = 0.,
+              epsilon: float = 1e-10,
               mdecay: float = 0.05,
               continue_training: bool = False,
               verbose: bool = False,
@@ -158,7 +159,7 @@ class Bohamiann(BaseModel):
             Networks sampled during burn-in are discarded.
         :param lr: learning rate
         :param batch_size: batch size
-        :param noise: noise for the sample
+        :param epsilon: epsilon for numerical stability
         :param mdecay: momemtum decay
         :param continue_training: defines whether we want to continue from the last training run
         :param verbose: verbose output
@@ -218,6 +219,11 @@ class Bohamiann(BaseModel):
             )
         )
 
+        if self.use_double_precision:
+            dtype = np.float64
+        else:
+            dtype = np.float32
+
         if not continue_training:
             logging.debug("Clearing list of sampled weights.")
 
@@ -227,61 +233,64 @@ class Bohamiann(BaseModel):
             else:
                 self.model = self.get_network(input_dimensionality=input_dimensionality).float()
 
-        if self.use_double_precision:
-            dtype = np.float64
-        else:
-            dtype = np.float32
-
-        if self.sampling_method == "adaptive_sghmc":
-            sampler = AdaptiveSGHMC(self.model.parameters(),
-                                    scale_grad=dtype(num_datapoints),
-                                    num_burn_in_steps=num_burn_in_steps,
-                                    lr=dtype(np.sqrt(lr)),
-                                    mdecay=dtype(mdecay),
-                                    noise=dtype(noise))
-        elif self.sampling_method == "sgld":
-            sampler = SGLD(self.model.parameters(),
-                           lr=dtype(lr),
-                           scale_grad=num_datapoints)
-        elif self.sampling_method == "preconditioned_sgld":
-            sampler = PreconditionedSGLD(self.model.parameters(),
-                                         lr=dtype(lr),
-                                         num_train_points=num_datapoints)
-        elif self.sampling_method == "sghmc":
-            sampler = SGHMC(self.model.parameters(),
-                            scale_grad=dtype(num_datapoints),
-                            mdecay=dtype(mdecay),
-                            lr=dtype(lr))
-        elif self.sampling_method == "constant_sgd":
-            sampler = ConstantSGD(self.model.parameters(),
-                                  batch_size=batch_size,
-                                  num_data_points=num_datapoints)
+            if self.sampling_method == "adaptive_sghmc":
+                self.sampler = AdaptiveSGHMC(self.model.parameters(),
+                                             scale_grad=dtype(num_datapoints),
+                                             num_burn_in_steps=num_burn_in_steps,
+                                             lr=dtype(lr),
+                                             mdecay=dtype(mdecay),
+                                             epsilon=dtype(epsilon))
+            elif self.sampling_method == "sgld":
+                self.sampler = SGLD(self.model.parameters(),
+                                    lr=dtype(lr),
+                                    scale_grad=num_datapoints)
+            elif self.sampling_method == "preconditioned_sgld":
+                self.sampler = PreconditionedSGLD(self.model.parameters(),
+                                                  lr=dtype(lr),
+                                                  num_train_points=num_datapoints)
+            elif self.sampling_method == "sghmc":
+                self.sampler = SGHMC(self.model.parameters(),
+                                     scale_grad=dtype(num_datapoints),
+                                     mdecay=dtype(mdecay),
+                                     lr=dtype(lr))
+            elif self.sampling_method == "constant_sgd":
+                self.sampler = ConstantSGD(self.model.parameters(),
+                                           batch_size=batch_size,
+                                           num_data_points=num_datapoints)
 
         batch_generator = islice(enumerate(train_loader), num_steps)
 
         for step, (x_batch, y_batch) in batch_generator:
-            sampler.zero_grad()
+            self.sampler.zero_grad()
             loss = self.likelihood_function(input=self.model(x_batch), target=y_batch)
+            # add prior. Note the gradient is computed by: g_prior + N/n sum_i grad_theta_xi see Eq 4
+            # in Welling and Whye The 2011. Because of that we divide here by N=num of datapoints since
+            # in the sample we rescale the gradient by N again
             loss -= log_variance_prior(self.model(x_batch)[:, 1].view((-1, 1))) / num_datapoints
-            loss -= weight_prior(self.model.parameters()).double() / num_datapoints
+            loss -= weight_prior(self.model.parameters(), dtype=dtype) / num_datapoints
             loss.backward()
-            sampler.step()
+            self.sampler.step()
 
             if verbose and step > 0 and step % self.print_every_n_steps == 0:
-                total_nll = 0
-                total_mse = 0
 
-                n_batches = x_train_.shape[0] // batch_size
-                for i in range(n_batches):
-                    x_batch = x_train_[(i * batch_size):((i + 1) * batch_size)]
-                    y_batch = y_train_[(i * batch_size):((i + 1) * batch_size)]
-                    # mu, var = self.predict(x_batch)
-                    f = self.model(x_batch)
-                    total_nll += torch.mean(self.likelihood_function(f, y_batch)).data.numpy()
-                    total_mse += torch.mean((f[:, 0] - y_batch) ** 2).data.numpy()
+                # compute the training performance of the ensemble
+                if len(self.sampled_weights) > 1:
+                    mu, var = self.predict(x_train)
+                    total_nll = -np.mean(norm.logpdf(y_train, loc=mu, scale=np.sqrt(var)))
+                    total_mse = np.mean((y_train - mu) ** 2)
+                # in case we do not have an ensemble we compute the performance of the last weight sample
+                else:
+                    f = self.model(x_train_)
 
-                total_nll /= n_batches
-                total_mse /= n_batches
+                    if self.do_normalize_output:
+                        mu = zero_mean_unit_var_denormalization(f[:, 0], self.y_mean, self.y_std).data.numpy()
+                        var = torch.exp(f[:, 1]) * self.y_std ** 2
+                        var = var.data.numpy()
+                    else:
+                        mu = f[:, 0].data.numpy()
+                        var = f[:, 1].data.numpy()
+                    total_nll = -np.mean(norm.logpdf(y_train, loc=mu, scale=np.sqrt(var)))
+                    total_mse = np.mean((y_train - mu) ** 2)
 
                 t = time.time() - start_time
 
@@ -311,7 +320,7 @@ class Bohamiann(BaseModel):
                            keep_every: int = 100,
                            num_burn_in_steps: int = 3000,
                            lr: float = 1e-2,
-                           noise: float = 0.,
+                           epsilon: float = 1e-10,
                            batch_size: int = 20,
                            mdecay: float = 0.05,
                            verbose=False):
@@ -333,7 +342,7 @@ class Bohamiann(BaseModel):
             Networks sampled during burn-in are discarded.
         :param lr: learning rate
         :param batch_size: batch size
-        :param noise: noise for the sample
+        :param epsilon: epsilon for numerical stability
         :param mdecay: momemtum decay
         :param verbose: verbose output
 
@@ -346,15 +355,16 @@ class Bohamiann(BaseModel):
 
         # burn-in
         self.train(x_train, y_train, num_burn_in_steps=num_burn_in_steps, num_steps=num_burn_in_steps,
-                   lr=lr, noise=noise, mdecay=mdecay, verbose=verbose)
+                   lr=lr, epsilon=epsilon, mdecay=mdecay, verbose=verbose)
 
         learning_curve_mse = []
         learning_curve_ll = []
         n_steps = []
         for i in range(num_steps // validate_every_n_steps):
             self.train(x_train, y_train, num_burn_in_steps=0, num_steps=validate_every_n_steps,
-                       lr=lr, noise=noise, mdecay=mdecay, verbose=verbose, keep_every=keep_every,
+                       lr=lr, epsilon=epsilon, mdecay=mdecay, verbose=verbose, keep_every=keep_every,
                        continue_training=True, batch_size=batch_size)
+
             mu, var = self.predict(x_valid)
 
             ll = np.mean(norm.logpdf(y_valid, loc=mu, scale=np.sqrt(var)))
@@ -366,7 +376,7 @@ class Bohamiann(BaseModel):
             n_steps.append(step)
 
             if verbose:
-                print("Validate : LL = {:11.4e} MSE = {:.4e}".format(ll, mse))
+                print("Validate : NLL = {:11.4e} MSE = {:.4e}".format(-ll, mse))
 
         return n_steps, learning_curve_ll, learning_curve_mse
 
@@ -421,10 +431,12 @@ class Bohamiann(BaseModel):
         ])
 
         mean_prediction = np.mean(network_outputs[:, :, 0], axis=0)
-        variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2, axis=0)
+        # variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2, axis=0)
         # Total variance
-        # variance_prediction = np.mean(network_outputs[:, :, 0] ** 2 + np.exp(network_outputs[:, :, 1]),
-        #                               axis=0) - mean_prediction ** 2
+
+        variance_prediction = np.mean((network_outputs[:, :, 0] - mean_prediction) ** 2
+                                       + np.exp(network_outputs[:, :, 1]), axis=0)
+
 
         if self.do_normalize_output:
 

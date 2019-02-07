@@ -215,11 +215,9 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
 
 class LCNet(Bohamiann):
     def __init__(self,
-                 batch_size=20,
                  metrics=(nn.MSELoss,)
                  ) -> None:
         super(LCNet, self).__init__(get_network=get_lc_net_architecture,
-                                    batch_size=batch_size,
                                     normalize_input=True,
                                     normalize_output=False,
                                     metrics=metrics)
