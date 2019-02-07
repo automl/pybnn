@@ -27,3 +27,5 @@ comment:
 
 ignore:
     - "pybnn/notebooks/.*"
+    - "pybnn/setup.py"
+    - "pybnn/test/*"
