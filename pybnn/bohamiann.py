@@ -173,13 +173,18 @@ class Bohamiann(BaseModel):
             " with % dimensions each." % (num_datapoints, input_dimensionality)
         )
         assert batch_size >= 1, "Invalid batch size. Batches must contain at least a single sample."
+        assert len(y_train.shape) == 1 or (len(y_train.shape) == 2 and y_train.shape[
+            1] == 1), "Targets need to be in vector format, i.e (N,) or (N,1)"
 
         if x_train.shape[0] < batch_size:
             logging.warning("Not enough datapoints to form a batch. Use all datapoints in each batch")
             batch_size = x_train.shape[0]
 
         self.X = x_train
-        self.y = y_train
+        if len(y_train.shape) == 2:
+            self.y = y_train[:, 0]
+        else:
+            self.y = y_train
 
         if self.do_normalize_input:
             logging.debug(
