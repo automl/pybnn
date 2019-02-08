@@ -204,7 +204,7 @@ class Bohamiann(BaseModel):
 
         if self.do_normalize_output:
             logging.debug("Normalizing training labels to zero mean and unit variance.")
-            y_train_, self.y_mean, self.y_std = self.normalize_output(y_train)
+            y_train_, self.y_mean, self.y_std = self.normalize_output(self.y)
 
             if self.use_double_precision:
                 y_train_ = torch.from_numpy(y_train_).double()
