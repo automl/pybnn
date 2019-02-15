@@ -289,7 +289,7 @@ class DNGO(BaseModel):
 
         K = beta * np.dot(self.Theta.T, self.Theta)
         K += np.eye(self.Theta.shape[1]) * alpha
-        K_inv = np.linalg.inv(K)
+        K_inv = np.linalg.inv(K + 1e-10)
         m = beta * np.dot(K_inv, self.Theta.T)
         m = np.dot(m, self.y)
 
