@@ -134,7 +134,12 @@ class BayesianLinearRegression(BaseModel):
 
         A = beta * np.dot(self.X_transformed.T, self.X_transformed)
         A += np.eye(self.X_transformed.shape[1]) * alpha
-        A_inv = np.linalg.inv(A)
+        try:
+            A_inv = np.linalg.inv(A)
+        except np.linalg.linalg.LinAlgError:
+             A_inv = np.linalg.inv(A + np.random.rand(A.shape[0], A.shape[1]) * 1e-8)
+ 
+
         m = beta * np.dot(A_inv, self.X_transformed.T)
         m = np.dot(m, self.y)
 
@@ -239,8 +244,11 @@ class BayesianLinearRegression(BaseModel):
 
             S_inv = beta * np.dot(self.X_transformed.T, self.X_transformed)
             S_inv += np.eye(self.X_transformed.shape[1]) * alpha
+            try:
+                S = np.linalg.inv(S_inv)
+            except np.linalg.linalg.LinAlgError:
+                S = np.linalg.inv(S_inv + np.random.rand(S_inv.shape[0], S_inv.shape[1]) * 1e-8)
 
-            S = np.linalg.inv(S_inv)
             m = beta * np.dot(np.dot(S, self.X_transformed.T), self.y)
 
             self.models.append((m, S))
