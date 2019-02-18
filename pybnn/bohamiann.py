@@ -136,7 +136,7 @@ class Bohamiann(BaseModel):
               num_steps: int = 13000,
               keep_every: int = 100,
               num_burn_in_steps: int = 3000,
-              lr: float = 1e-5,
+              lr: float = 1e-2,
               batch_size=20,
               epsilon: float = 1e-10,
               mdecay: float = 0.05,
@@ -289,7 +289,7 @@ class Bohamiann(BaseModel):
                         var = var.data.numpy()
                     else:
                         mu = f[:, 0].data.numpy()
-                        var = f[:, 1].data.numpy()
+                        var = np.exp(f[:, 1].data.numpy())
                     total_nll = -np.mean(norm.logpdf(y_train, loc=mu, scale=np.sqrt(var)))
                     total_mse = np.mean((y_train - mu) ** 2)
 
