@@ -3,7 +3,9 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torch.nn as nn
+
 from pybnn.bohamiann import Bohamiann
+from pybnn.util.layers import AppendLayer
 
 """
 def vapor_pressure(t, a, b, c):
@@ -164,17 +166,6 @@ def bf_layer(theta, t):
     return torch.stack([y_a, y_b, y_c, y_d, y_e, y_f, y_g, y_h, y_i, y_j, y_k, y_l, y_m, y_n], dim=1)
 
 
-class AppendLayer(nn.Module):
-    def __init__(self, bias=True, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if bias:
-            self.bias = nn.Parameter(torch.DoubleTensor(1, 1))
-        else:
-            self.register_parameter('bias', None)
-
-    def forward(self, x):
-        return torch.cat((x, self.bias * torch.ones_like(x)), dim=1)
-
 
 def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
     class Architecture(nn.Module):
@@ -187,7 +178,7 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
             self.weight_layer = nn.Linear(n_hidden, 14)
             self.asymptotic_layer = nn.Linear(n_hidden, 1)
             # self.sigma_layer = nn.Linear(n_hidden, 1)
-            self.sigma_layer = AppendLayer()
+            self.sigma_layer = AppendLayer(noise=1e-2)
 
         def forward(self, input):
             x = input[:, :-1]
@@ -214,15 +205,14 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
 
 
 class LCNet(Bohamiann):
-    def __init__(self,
-                 metrics=(nn.MSELoss,)
-                 ) -> None:
+    def __init__(self, **kwargs) -> None:
         super(LCNet, self).__init__(get_network=get_lc_net_architecture,
                                     normalize_input=True,
                                     normalize_output=False,
-                                    metrics=metrics)
+                                    **kwargs)
 
-    def normalize_input(self, x, m=None, s=None):
+    @staticmethod
+    def normalize_input(x, m=None, s=None):
         if m is None:
             m = np.mean(x, axis=0)
         if s is None:
