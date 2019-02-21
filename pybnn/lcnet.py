@@ -60,7 +60,7 @@ def bf_layer(theta, t):
 
     return torch.stack([y_a, y_b, y_c, y_d, y_e], dim=1)
 
-"""
+
 
 
 def vapor_pressure(x, a, b, c, *args):
@@ -164,7 +164,36 @@ def bf_layer(theta, t):
     y_n = exponential(t, theta[:, 38], theta[:, 39])
 
     return torch.stack([y_a, y_b, y_c, y_d, y_e, y_f, y_g, y_h, y_i, y_j, y_k, y_l, y_m, y_n], dim=1)
+"""
 
+
+def vapor_pressure(x, a, b, c, *args):
+    b_ = (b + 1) / 2 / 100
+    a_ = (a + 1) / 2
+    c_ = (c + 1) / 2
+    return (torch.exp(a_ + b_ / (x + 1e-5) + c_ * torch.log(x)))
+
+
+def log_func(t, a, b, c, *args):
+    a_ = (a + 1) / 2 * 5
+    b_ = (b + 1) / 2 * 5
+    c_ = (b + 1) / 2 * 10
+    return (c_ + a_ * torch.log(b_ * t)) / 10.
+
+
+def linear(x, bias=0, a=1, *args):
+    a_ = (a + 1) / 2 * 5
+    return a_ * x + bias
+
+
+def bf_layer(theta, t):
+    y_a = vapor_pressure(t, theta[:, 0], theta[:, 1], theta[:, 2])
+
+    y_b = log_func(t, theta[:, 3], theta[:, 4], theta[:, 5])
+
+    y_c = linear(t, theta[:, 6], theta[:, 7])
+
+    return torch.stack([y_a, y_b, y_c], dim=1)
 
 
 def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
@@ -174,11 +203,11 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
             self.fc1 = nn.Linear(n_inputs - 1, n_hidden)
             self.fc2 = nn.Linear(n_hidden, n_hidden)
             self.fc3 = nn.Linear(n_hidden, n_hidden)
-            self.theta_layer = nn.Linear(n_hidden, 40)
-            self.weight_layer = nn.Linear(n_hidden, 14)
+            self.theta_layer = nn.Linear(n_hidden, 8)
+            self.weight_layer = nn.Linear(n_hidden, 3)
             self.asymptotic_layer = nn.Linear(n_hidden, 1)
             # self.sigma_layer = nn.Linear(n_hidden, 1)
-            self.sigma_layer = AppendLayer(noise=1e-2)
+            self.sigma_layer = AppendLayer(noise=1e-3)
 
         def forward(self, input):
             x = input[:, :-1]
@@ -186,7 +215,7 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
             x = torch.tanh(self.fc1(x))
             x = torch.tanh(self.fc2(x))
             x = torch.tanh(self.fc3(x))
-            theta = torch.sigmoid(self.theta_layer(x))
+            theta = torch.tanh(self.theta_layer(x))
 
             bf = bf_layer(theta, t)
             weights = torch.softmax(self.weight_layer(x), -1)
@@ -195,7 +224,7 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
             asymptotic = torch.sigmoid(self.asymptotic_layer(x))
 
             mean = residual + asymptotic
-
+            # mean = residual
             return self.sigma_layer(mean)
             # std = torch.sigmoid(self.sigma_layer(x))
 
