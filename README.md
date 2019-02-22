@@ -3,11 +3,12 @@
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/automl/pybnn/blob/master/LICENSE)
 
 # pybnn
-Bayesian neural networks for Bayesian optimization based on pytorch.
+Bayesian neural networks for Bayesian optimization.
 
- It contains implementations for:
+ It contains implementations for methods described in the following papers:
  - [Scalable Bayesian Optimization Using Deep Neural Networks](https://arxiv.org/pdf/1502.05700.pdf) (DNGO)
- - [Bayesian optimization with robust Bayesian neural networks](https://ml.informatik.uni-freiburg.de/papers/16-NIPS-BOHamiANN.pdf) (BOHAMIANN)
+ - [Bayesian Optimization With Robust Bayesian Neural Networks](https://ml.informatik.uni-freiburg.de/papers/16-NIPS-BOHamiANN.pdf) (BOHAMIANN)
+ - [Learning Curve Prediction With Bayesian Neural Networks](http://ml.informatik.uni-freiburg.de/papers/17-ICLR-LCNet.pdf) (LC-Net)
 
 # Installation
 
