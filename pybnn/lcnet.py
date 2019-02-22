@@ -171,18 +171,18 @@ def vapor_pressure(x, a, b, c, *args):
     b_ = (b + 1) / 2 / 100
     a_ = (a + 1) / 2
     c_ = (c + 1) / 2
-    return (torch.exp(a_ + b_ / (x + 1e-5) + c_ * torch.log(x)))
+    return (torch.exp(a_ + b_ / (x + 1e-5) + c_ * torch.log(x))) # - (torch.exp(a_ + b_))
 
 
 def log_func(t, a, b, c, *args):
     a_ = (a + 1) / 2 * 5
     b_ = (b + 1) / 2 * 5
     c_ = (b + 1) / 2 * 10
-    return (c_ + a_ * torch.log(b_ * t)) / 10.
+    return (c_ + a_ * torch.log(b_ * t)) / 10. #- (c_ + a_ * torch.log(b_)) / 10.
 
 
 def linear(x, bias=0, a=1, *args):
-    a_ = (a + 1) / 2 * 5
+    a_ = (a + 1) / 2
     return a_ * x + bias
 
 
@@ -193,8 +193,7 @@ def bf_layer(theta, t):
 
     y_c = linear(t, theta[:, 6], theta[:, 7])
 
-    return torch.stack([y_a, y_b, y_c], dim=1)
-
+    return torch.stack([y_a, y_b], dim=1)
 
 def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
     class Architecture(nn.Module):
@@ -204,7 +203,7 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
             self.fc2 = nn.Linear(n_hidden, n_hidden)
             self.fc3 = nn.Linear(n_hidden, n_hidden)
             self.theta_layer = nn.Linear(n_hidden, 8)
-            self.weight_layer = nn.Linear(n_hidden, 3)
+            self.weight_layer = nn.Linear(n_hidden, 2)
             self.asymptotic_layer = nn.Linear(n_hidden, 1)
             # self.sigma_layer = nn.Linear(n_hidden, 1)
             self.sigma_layer = AppendLayer(noise=1e-3)
@@ -219,12 +218,12 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
 
             bf = bf_layer(theta, t)
             weights = torch.softmax(self.weight_layer(x), -1)
-            residual = torch.sum(bf * weights, dim=(1,), keepdim=True)
+            residual = torch.tanh(torch.sum(bf * weights, dim=(1,), keepdim=True))
 
-            asymptotic = torch.sigmoid(self.asymptotic_layer(x))
+            #             asymptotic = torch.sigmoid(self.asymptotic_layer(x))
 
-            mean = residual + asymptotic
-            # mean = residual
+            #             mean = residual + asymptotic
+            mean = residual
             return self.sigma_layer(mean)
             # std = torch.sigmoid(self.sigma_layer(x))
 
