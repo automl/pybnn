@@ -3,7 +3,6 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torch.nn as nn
-
 from pybnn.bohamiann import Bohamiann
 from pybnn.util.layers import AppendLayer
 
@@ -176,19 +175,22 @@ def vapor_pressure(x, a, b, c, *args):
     b_ = (b + 1) / 2 / 10
     a_ = (a + 1) / 2
     c_ = (c + 1) / 2 / 10
-    return (torch.exp(-a_ - b_ / (x + 1e-5) - c_ * torch.log(x))) # - (torch.exp(a_ + b_))
+    return torch.exp(-a_ - b_ / (x + 1e-5) - c_ * torch.log(x))  # - (torch.exp(a_ + b_))
+
 
 def log_func(t, a, b, c, *args):
     a_ = (a + 1) / 2 * 5
     b_ = (b + 1) / 2
     c_ = (c + 1) / 2 * 10
-    return (c_ + a_ * torch.log(b_ * t)) / 10. #- (c_ + a_ * torch.log(b_)) / 10.
+    return (c_ + a_ * torch.log(b_ * t + 1e-10)) / 10.  # - (c_ + a_ * torch.log(b_)) / 10.
+
 
 def hill_3(x, a, b, c, *args):
     a_ = (a + 1) / 2
     b_ = (b + 1) / 2
     c_ = (c + 1) / 2
-    return a_ * (1. / ((c_ / x) ** b_ + 1.))
+    return a_ * (1. / ((c_ / x + 1e-5) ** b_ + 1.))
+
 
 def linear(x, bias=0, a=1, *args):
     a_ = (a + 1) / 2
@@ -201,9 +203,10 @@ def bf_layer(theta, t):
     y_b = log_func(t, theta[:, 3], theta[:, 4], theta[:, 5])
 
     # y_c = linear(t, theta[:, 6], theta[:, 7])
-    y_c = hill_3(t, theta[:, 6],  theta[:, 7], theta[:, 8])
+    y_c = hill_3(t, theta[:, 6], theta[:, 7], theta[:, 8])
 
     return torch.stack([y_a, y_b, y_c], dim=1)
+
 
 def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
     class Architecture(nn.Module):
