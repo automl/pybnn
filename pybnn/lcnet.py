@@ -175,7 +175,7 @@ def vapor_pressure(x, a, b, c, *args):
     b_ = (b + 1) / 2 / 10
     a_ = (a + 1) / 2
     c_ = (c + 1) / 2 / 10
-    return torch.exp(-a_ - b_ / (x + 1e-5) - c_ * torch.log(x))  # - (torch.exp(a_ + b_))
+    return torch.exp(-a_ - b_ / (x + 1e-5) - c_ * torch.log(x))  - (torch.exp(a_ + b_))
 
 
 def log_func(t, a, b, c, *args):
@@ -188,7 +188,7 @@ def log_func(t, a, b, c, *args):
 def hill_3(x, a, b, c, *args):
     a_ = (a + 1) / 2
     b_ = (b + 1) / 2
-    c_ = (c + 1) / 2
+    c_ = (c + 1) / 2 / 100
     return a_ * (1. / ((c_ / x + 1e-5) ** b_ + 1.))
 
 
@@ -233,10 +233,10 @@ def get_lc_net_architecture(input_dimensionality: int) -> torch.nn.Module:
             weights = torch.softmax(self.weight_layer(x), -1)
             residual = torch.tanh(torch.sum(bf * weights, dim=(1,), keepdim=True))
 
-            #             asymptotic = torch.sigmoid(self.asymptotic_layer(x))
+            asymptotic = torch.sigmoid(self.asymptotic_layer(x))
 
-            #             mean = residual + asymptotic
-            mean = residual
+            mean = residual + asymptotic
+            # mean = residual
             return self.sigma_layer(mean)
             # std = torch.sigmoid(self.sigma_layer(x))
 
