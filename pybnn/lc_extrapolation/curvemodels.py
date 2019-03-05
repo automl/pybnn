@@ -50,7 +50,7 @@ class CurveModel(object):
         self.default_vals = default_vals.copy()
         for param_name in self.function_params:
             if param_name not in default_vals:
-                print("setting function parameter %s to default of 1.0 for "
+                logging.info("setting function parameter %s to default of 1.0 for "
                       "function %s" % (param_name, self.function.__name__))
                 self.default_vals[param_name] = 1.0
         self.all_param_names = [param for param in self.function_params]
@@ -241,9 +241,9 @@ class MLCurveModel(CurveModel):
                 logging.warn("best parameters found: " + str(popt))
                 return False
         except Exception as e:
-            print(e)
+            logging.error(e)
             tb = traceback.format_exc()
-            print(tb)
+            logging.error(tb)
             return False
 
     def fit_bfgs(self, x, y, weights, start_from_default):

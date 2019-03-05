@@ -1,4 +1,5 @@
 import emcee
+import logging
 import numpy as np
 from pybnn.lc_extrapolation.curvefunctions import curve_combination_models, \
     model_defaults, all_models
@@ -83,12 +84,12 @@ class MCMCCurveModelCombination(object):
     def fit(self, x, y, model_weights=None):
         if self.fit_ml_individual(x, y, model_weights):
             # run MCMC:
-            print('Fitted models!')
+            logging.info('Fitted models!')
             self.fit_mcmc(x, y)
-            print('Fitted mcmc!')
+            logging.info('Fitted mcmc!')
             return True
         else:
-            print("fit_ml_individual failed")
+            logging.warning("fit_ml_individual failed")
             return False
 
     def y_lim_sanity_check(self, ylim):
@@ -171,9 +172,8 @@ class MCMCCurveModelCombination(object):
         self.ndim = len(self.ml_params)
         if self.nwalkers < 2 * self.ndim:
             self.nwalkers = 2 * self.ndim
-            print("warning: increasing number of walkers to 2*ndim=%d" % (
+            logging.warning("increasing number of walkers to 2*ndim=%d" % (
                 self.nwalkers))
-        print([model.function.__name__ for model in self.fit_models])
         return True
 
     def get_ml_model_weights(self, x, y_target):
