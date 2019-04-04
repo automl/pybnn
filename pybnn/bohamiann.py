@@ -115,7 +115,7 @@ class Bohamiann(BaseModel):
         :return: Tuple containing current network weight values
         """
         return tuple(
-            np.asarray(torch.tensor(parameter.data).numpy())
+            np.asarray(parameter.data.clone().detach().numpy())
             for parameter in self.model.parameters()
         )
 
