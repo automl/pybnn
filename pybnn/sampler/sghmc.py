@@ -68,7 +68,6 @@ class SGHMC(Optimizer):
 
                 if len(state) == 0:
                     state["iteration"] = 0
-                    # state["momentum"] = torch.zeros_like(parameter)
                     state["momentum"] = torch.randn(parameter.size(), dtype=parameter.dtype)
 
                 state["iteration"] += 1
@@ -79,16 +78,9 @@ class SGHMC(Optimizer):
                 momentum = state["momentum"]
                 gradient = parameter.grad.data * scale_grad
 
-                # sigma = torch.sqrt(2 * lr * mdecay / scale_grad)
                 sigma = torch.sqrt(torch.from_numpy(np.array(2 * lr * mdecay, dtype=type(lr))))
                 sample_t = torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient) * sigma)
-                # momentum_update = (1 - mdecay) * momentum - lr * gradient + sample_t #- lr * wd * parameter.data
 
-                # momentum_t = momentum.add_(
-                #     - lr * gradient - mdecay * momentum + sample_t
-                # )
-
-                # parameter.data.add_(momentum_t)
                 parameter.data.add_(lr * momentum)
-                momentum.add_(-lr * gradient - mdecay * momentum + sample_t)
+                momentum.add_(-lr * gradient - mdecay * lr * momentum + sample_t)
         return loss
