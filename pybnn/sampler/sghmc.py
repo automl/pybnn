@@ -81,6 +81,6 @@ class SGHMC(Optimizer):
                 sigma = torch.sqrt(torch.from_numpy(np.array(2 * lr * mdecay, dtype=type(lr))))
                 sample_t = torch.normal(mean=torch.zeros_like(gradient), std=torch.ones_like(gradient) * sigma)
 
-                parameter.data.add_(lr * momentum)
+                parameter.data.add_(lr * mdecay * momentum)
                 momentum.add_(-lr * gradient - mdecay * lr * momentum + sample_t)
         return loss
