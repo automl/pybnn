@@ -221,20 +221,21 @@ class DNGO(BaseModel):
                     # Initialize the walkers by sampling from the prior
                     self.p0 = self.prior.sample_from_prior(self.n_hypers)
                     # Run MCMC sampling
-                    self.p0, _, _ = self.sampler.run_mcmc(self.p0,
-                                                          self.burnin_steps,
-                                                          rstate0=self.rng)
+                    result = self.sampler.run_mcmc(self.p0,
+                                                   self.burnin_steps,
+                                                   rstate0=self.rng)
+                    self.p0 = result.coords
 
                     self.burned = True
 
                 # Start sampling
-                pos, _, _ = self.sampler.run_mcmc(self.p0,
-                                                  self.chain_length,
-                                                  rstate0=self.rng)
+                pos = self.sampler.run_mcmc(self.p0,
+                                            self.chain_length,
+                                            rstate0=self.rng)
 
                 # Save the current position, it will be the startpoint in
                 # the next iteration
-                self.p0 = pos
+                self.p0 = pos.coords
 
                 # Take the last samples from each walker set them back on a linear scale
                 linear_theta = np.exp(self.sampler.chain[:, -1])

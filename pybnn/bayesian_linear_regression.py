@@ -210,20 +210,21 @@ class BayesianLinearRegression(BaseModel):
                     self.p0 = self.prior.sample_from_prior(self.n_hypers)
 
                     # Run MCMC sampling
-                    self.p0, _, _ = sampler.run_mcmc(self.p0,
-                                                     self.burnin_steps,
-                                                     rstate0=self.rng)
+                    result = sampler.run_mcmc(self.p0,
+                                              self.burnin_steps,
+                                              rstate0=self.rng)
+                    self.p0 = result.coords
 
                     self.burned = True
 
                 # Start sampling
-                pos, _, _ = sampler.run_mcmc(self.p0,
-                                             self.chain_length,
-                                             rstate0=self.rng)
+                pos = sampler.run_mcmc(self.p0,
+                                       self.chain_length,
+                                       rstate0=self.rng)
 
                 # Save the current position, it will be the start point in
                 # the next iteration
-                self.p0 = pos
+                self.p0 = pos.coords
 
                 # Take the last samples from each walker
                 self.hypers = np.exp(sampler.chain[:, -1])
