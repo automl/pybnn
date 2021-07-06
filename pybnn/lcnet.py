@@ -87,5 +87,11 @@ class LCNet(Bohamiann):
 
         x_norm = deepcopy(x)
         x_norm[:, :-1] = (x[:, :-1] - m[:-1]) / s[:-1]
+        flag = True
+        for i in s[:-1]:
+            if i < 0.0001:
+                flag = False
+        if flag:
+            x_norm[:, :-1] = (x[:, :-1] - m[:-1]) / s[:-1]
 
         return x_norm, m, s
